@@ -1,0 +1,34 @@
+name: Bug report
+description: Report a reproducible adapter defect
+title: "[bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Please remove secrets and provide the smallest reproduction possible.
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Astro, Bun, adapter, and operating system versions
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Public repository or exact steps that reproduce the issue
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and logs
+    validations:
+      required: true

@@ -1,0 +1,10 @@
+---
+await Astro.session?.set("adapter", "bun")
+const value = await Astro.session?.get("adapter")
+---
+
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Session fixture</title></head>
+  <body>{value}</body>
+</html>

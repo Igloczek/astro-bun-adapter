@@ -1,0 +1,15 @@
+---
+const address = Astro.clientAddress
+const message = (Astro.locals as { message?: string }).message ?? "standalone"
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Bun adapter fixture</title>
+  </head>
+  <body>
+    <main data-address={address} data-message={message}>adapter fixture</main>
+  </body>
+</html>
