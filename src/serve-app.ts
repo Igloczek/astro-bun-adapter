@@ -6,6 +6,13 @@ import type { BaseApp } from "astro/app";
 import { resolveClientDir } from "./shared.js";
 import type { BunRequestContext, Options, RequestHandler } from "./types.js";
 
+const FORWARDED_PROTOCOLS = new Set(["http", "https"]);
+
+function firstForwardedValue(value: string | null) {
+  const token = value?.split(",")[0]?.trim().toLowerCase();
+  return token || undefined;
+}
+
 function forwardedAddresses(value: string | null) {
   if (!value) return undefined;
   const addresses = value.split(",").map((address) => address.trim());
@@ -29,6 +36,27 @@ export function resolveClientAddress(
   const chain = [...forwarded, peerAddress];
   while (chain.length > 0 && trusted.has(chain.at(-1)!)) chain.pop();
   return chain.at(-1) ?? peerAddress;
+}
+
+/**
+ * Apply `X-Forwarded-Proto` only when the direct peer is trusted.
+ * `X-Forwarded-Host` is ignored.
+ */
+export function applyForwardedOrigin(
+  request: Request,
+  peerAddress: string | undefined,
+  trustedProxies: readonly string[],
+) {
+  if (!peerAddress || !trustedProxies.includes(peerAddress)) return request;
+
+  const proto = firstForwardedValue(request.headers.get("x-forwarded-proto"));
+  if (!proto || !FORWARDED_PROTOCOLS.has(proto)) return request;
+
+  const url = new URL(request.url);
+  if (url.protocol === `${proto}:`) return request;
+
+  url.protocol = `${proto}:`;
+  return new Request(url, request);
 }
 
 async function readErrorPageFromDisk(
@@ -82,12 +110,17 @@ export function createAppHandler(
     }
 
     try {
-      const clientAddress = resolveClientAddress(
+      const incoming = applyForwardedOrigin(
         request,
         context.clientAddress,
         options.trustedProxies,
       );
-      const routeData = app.match(request, true);
+      const clientAddress = resolveClientAddress(
+        incoming,
+        context.clientAddress,
+        options.trustedProxies,
+      );
+      const routeData = app.match(incoming, true);
       const renderOptions = {
         addCookieHeader: true,
         ...(clientAddress === undefined ? {} : { clientAddress }),
@@ -96,9 +129,9 @@ export function createAppHandler(
       };
 
       if (routeData && !(routeData.type === "page" && routeData.prerender)) {
-        return await app.render(request, { ...renderOptions, routeData });
+        return await app.render(incoming, { ...renderOptions, routeData });
       }
-      return await app.render(request, renderOptions);
+      return await app.render(incoming, renderOptions);
     } catch (error) {
       app.adapterLogger.error(`Could not render ${request.url}`);
       console.error(error);

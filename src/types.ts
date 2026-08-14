@@ -34,8 +34,9 @@ export interface UserOptions {
    */
   idleTimeout?: number;
   /**
-   * Exact proxy IPs allowed to supply `X-Forwarded-For`. Forwarded headers are
-   * ignored by default.
+   * Exact proxy IPs allowed to supply `X-Forwarded-For` and
+   * `X-Forwarded-Proto`. Client addresses and the request scheme are taken
+   * from the peer unless the proxy is listed.
    */
   trustedProxies?: string[];
   /** Native Bun TLS configuration using filesystem paths. */
