@@ -38,17 +38,8 @@ export function resolveClientAddress(
   return chain.at(-1) ?? peerAddress;
 }
 
-/**
- * Apply `X-Forwarded-Proto` only when the direct peer is trusted.
- * `X-Forwarded-Host` is ignored.
- */
-export function applyForwardedOrigin(
-  request: Request,
-  peerAddress: string | undefined,
-  trustedProxies: readonly string[],
-) {
-  if (!peerAddress || !trustedProxies.includes(peerAddress)) return request;
-
+/** Apply `X-Forwarded-Proto` only. `X-Forwarded-Host` is ignored. */
+export function applyForwardedOrigin(request: Request) {
   const proto = firstForwardedValue(request.headers.get("x-forwarded-proto"));
   if (!proto || !FORWARDED_PROTOCOLS.has(proto)) return request;
 
@@ -110,11 +101,7 @@ export function createAppHandler(
     }
 
     try {
-      const incoming = applyForwardedOrigin(
-        request,
-        context.clientAddress,
-        options.trustedProxies,
-      );
+      const incoming = applyForwardedOrigin(request);
       const clientAddress = resolveClientAddress(
         incoming,
         context.clientAddress,

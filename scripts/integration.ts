@@ -160,41 +160,75 @@ async function assertImageLoads(baseUrl: string, href: string) {
   assertPng(body, 1, 1);
 }
 
-async function rawStatus(port: number, requestPath: string) {
-  return new Promise<number>((resolve, reject) => {
+async function rawRequest(
+  port: number,
+  requestPath: string,
+  extraHeaders: Record<string, string> = {},
+  host = "localhost",
+) {
+  return new Promise<{ status: number; body: string }>((resolve, reject) => {
     let response = "";
     const decoder = new TextDecoder();
+    const headers = [
+      `GET ${requestPath} HTTP/1.1`,
+      `Host: ${host}`,
+      ...Object.entries(extraHeaders).map(
+        ([name, value]) => `${name}: ${value}`,
+      ),
+      "Connection: close",
+      "",
+      "",
+    ].join("\r\n");
     void Bun.connect({
       hostname: "127.0.0.1",
       port,
       socket: {
         open(socket) {
-          socket.write(
-            `GET ${requestPath} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n`,
-          );
+          socket.write(headers);
         },
-        data(socket, data) {
+        data(_socket, data) {
           response += decoder.decode(data, { stream: true });
-          const match = /^HTTP\/1\.[01] (\d{3})/.exec(response);
-          if (match?.[1]) {
-            socket.terminate();
-            resolve(Number(match[1]));
-          }
         },
         error(_socket, error) {
           reject(error);
         },
         close() {
           const match = /^HTTP\/1\.[01] (\d{3})/.exec(response);
-          if (match?.[1]) resolve(Number(match[1]));
-          else
+          if (!match?.[1]) {
             reject(
               new Error("Connection closed before an HTTP status was received"),
             );
+            return;
+          }
+          const split = response.indexOf("\r\n\r\n");
+          resolve({
+            status: Number(match[1]),
+            body: split === -1 ? "" : response.slice(split + 4),
+          });
         },
       },
     }).catch(reject);
   });
+}
+
+async function rawStatus(port: number, requestPath: string) {
+  return (await rawRequest(port, requestPath)).status;
+}
+
+async function assertCoolifyOrigin(baseUrl: string) {
+  const port = Number(new URL(baseUrl).port);
+  const { status, body } = await rawRequest(
+    port,
+    "/",
+    { "X-Forwarded-Proto": "https" },
+    "cringe-o-meter.com",
+  );
+  assert.equal(status, 200);
+  assert.match(
+    body,
+    /data-origin="https:\/\/cringe-o-meter.com"/,
+    "Coolify-shaped request must rebuild https://cringe-o-meter.com, not http://",
+  );
 }
 
 async function testStandalone() {
@@ -219,6 +253,7 @@ async function testStandalone() {
     const home = await response.text();
     assert.match(home, /data-address="203\.0\.113\.8"/);
     assert.match(home, /data-origin="https:\/\/127\.0\.0\.1:\d+"/);
+    await assertCoolifyOrigin(runner.baseUrl);
     await assertImageLoads(
       runner.baseUrl,
       await hashedPixelHref(path.join(site, "relocated-dist/client")),
@@ -322,6 +357,7 @@ async function testMiddleware() {
     assert.match(html, /data-address="198\.51\.100\.9"/);
     assert.match(html, /data-message="middleware"/);
     assert.match(html, /data-origin="https:\/\/127\.0\.0\.1:\d+"/);
+    await assertCoolifyOrigin(runner.baseUrl);
 
     response = await fetch(`${runner.baseUrl}/api/echo`, {
       method: "POST",
