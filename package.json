@@ -55,8 +55,8 @@
   },
   "devDependencies": {
     "@types/bun": "1.3.14",
-    "astro": "7.1.6",
-    "oxlint": "1.76.0",
+    "astro": "7.2.0",
+    "oxlint": "1.78.0",
     "prettier": "3.9.6",
     "typescript": "7.0.2"
   },
