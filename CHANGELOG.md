@@ -2,7 +2,7 @@
 
 All notable changes are documented here. This project follows Semantic Versioning.
 
-## Unreleased
+## 0.2.1 - 2026-08-14
 
 - Apply `X-Forwarded-Proto` without a `trustedProxies` allowlist. Coolify and other TLS-terminating proxies do not need their Docker IP listed. `X-Forwarded-For` is still gated. `X-Forwarded-Host` is still ignored.
 
