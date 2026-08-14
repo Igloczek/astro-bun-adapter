@@ -4,6 +4,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
   rename,
   rm,
   symlink,
@@ -126,6 +127,39 @@ async function testPreview() {
   assert.ok([0, 143].includes(await process.exited));
 }
 
+async function hashedPixelHref(clientDir: string) {
+  const files = await readdir(path.join(clientDir, "_astro"));
+  const pixel = files.find(
+    (name) => name.startsWith("pixel.") && name.endsWith(".png"),
+  );
+  assert.ok(pixel, `hashed pixel asset missing in ${clientDir}`);
+  return `/_astro/${pixel}`;
+}
+
+function assertPng(bytes: Uint8Array, width: number, height: number) {
+  assert.ok(bytes.byteLength >= 24, "image response is too small");
+  assert.deepEqual(
+    [...bytes.subarray(0, 8)],
+    [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+    "image response is not a PNG",
+  );
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  assert.equal(view.getUint32(16), width);
+  assert.equal(view.getUint32(20), height);
+}
+
+async function assertImageLoads(baseUrl: string, href: string) {
+  const url = new URL("/_image", baseUrl);
+  url.searchParams.set("href", href);
+  url.searchParams.set("w", "1");
+  url.searchParams.set("h", "1");
+  url.searchParams.set("f", "png");
+  const response = await fetch(url);
+  const body = new Uint8Array(await response.arrayBuffer());
+  assert.equal(response.status, 200, `/_image returned ${response.status}`);
+  assertPng(body, 1, 1);
+}
+
 async function rawStatus(port: number, requestPath: string) {
   return new Promise<number>((resolve, reject) => {
     let response = "";
@@ -176,10 +210,19 @@ async function testStandalone() {
   );
   try {
     let response = await fetch(`${runner.baseUrl}/`, {
-      headers: { "x-forwarded-for": "203.0.113.8" },
+      headers: {
+        "x-forwarded-for": "203.0.113.8",
+        "x-forwarded-proto": "https",
+      },
     });
     assert.equal(response.status, 200);
-    assert.match(await response.text(), /data-address="203\.0\.113\.8"/);
+    const home = await response.text();
+    assert.match(home, /data-address="203\.0\.113\.8"/);
+    assert.match(home, /data-origin="https:\/\/127\.0\.0\.1:\d+"/);
+    await assertImageLoads(
+      runner.baseUrl,
+      await hashedPixelHref(path.join(site, "relocated-dist/client")),
+    );
 
     response = await fetch(`${runner.baseUrl}/session`);
     assert.equal(response.status, 200);
@@ -269,18 +312,23 @@ async function testMiddleware() {
   const runner = await startRunner("middleware", "dist/server/entry.mjs");
   try {
     let response = await fetch(`${runner.baseUrl}/`, {
-      headers: { "x-forwarded-for": "198.51.100.9" },
+      headers: {
+        "x-forwarded-for": "198.51.100.9",
+        "x-forwarded-proto": "https",
+      },
     });
     assert.equal(response.status, 200);
     const html = await response.text();
     assert.match(html, /data-address="198\.51\.100\.9"/);
     assert.match(html, /data-message="middleware"/);
+    assert.match(html, /data-origin="https:\/\/127\.0\.0\.1:\d+"/);
 
     response = await fetch(`${runner.baseUrl}/api/echo`, {
       method: "POST",
       headers: {
-        origin: runner.baseUrl,
+        origin: runner.baseUrl.replace(/^http:/, "https:"),
         "x-forwarded-for": "198.51.100.9",
+        "x-forwarded-proto": "https",
       },
       body: "request body",
     });

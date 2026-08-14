@@ -1,6 +1,10 @@
 ---
+import { Image } from "astro:assets";
+import pixel from "../assets/pixel.png";
+
 const address = Astro.clientAddress
 const message = (Astro.locals as { message?: string }).message ?? "standalone"
+const origin = Astro.url.origin
 ---
 
 <!doctype html>
@@ -10,6 +14,13 @@ const message = (Astro.locals as { message?: string }).message ?? "standalone"
     <title>Bun adapter fixture</title>
   </head>
   <body>
-    <main data-address={address} data-message={message}>adapter fixture</main>
+    <main
+      data-address={address}
+      data-message={message}
+      data-origin={origin}
+    >
+      adapter fixture
+      <Image src={pixel} alt="fixture pixel" />
+    </main>
   </body>
 </html>

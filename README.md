@@ -78,13 +78,15 @@ The entry module also exports normalized `options` and an idempotent `startServe
 | `bodySizeLimit`                | Bun default       | Maximum body bytes; `0`/`Infinity` disables the limit   |
 | `reusePort`                    | `false`           | Allow multiple Bun processes on one port                |
 | `idleTimeout`                  | Bun default (10s) | `0` disables it; maximum is 255 seconds                 |
-| `trustedProxies`               | `[]`              | Exact proxy IPs allowed to supply `X-Forwarded-For`     |
+| `trustedProxies`               | `[]`              | Exact proxy IPs allowed to supply forwarded headers     |
 | `tls`                          | none              | Certificate/key paths for native TLS                    |
 | `experimentalDisableStreaming` | `false`           | Disable Astro HTML streaming                            |
 
 ### Trusted proxies
 
-Forwarded headers are ignored unless the direct peer is listed in `trustedProxies`. The adapter walks the forwarding chain from right to left and returns the last untrusted address, preventing a client from forging the leftmost value through a well-behaved proxy.
+`X-Forwarded-For` and `X-Forwarded-Proto` are ignored unless the direct peer is listed in `trustedProxies`. The adapter walks the forwarding chain from right to left and returns the last untrusted address, preventing a client from forging the leftmost value through a well-behaved proxy.
+
+When the peer is trusted, the first `X-Forwarded-Proto` hop is applied if it is `http` or `https`. That restores the public scheme behind a TLS-terminating proxy (Coolify, Caddy, Traefik) so Astro's `/_image` endpoint self-fetches `https://your-domain/...` instead of `http://...`. `X-Forwarded-Host` is never applied.
 
 ```ts
 bun({
