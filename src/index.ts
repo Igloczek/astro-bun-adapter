@@ -19,7 +19,6 @@ import type {
   BunRequestContext,
   Options,
   RequestHandler,
-  TlsOptions,
   UserOptions,
 } from "./types.js";
 import { createConfigPlugin } from "./vite-plugin-config.js";
@@ -28,7 +27,6 @@ export type {
   BunAppHeadersJson,
   BunRequestContext,
   RequestHandler,
-  TlsOptions,
   UserOptions,
 };
 

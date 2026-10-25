@@ -1,15 +1,10 @@
 import type { BaseApp } from "astro/app";
 
-import { PACKAGE_NAME } from "./config.js";
+import { PACKAGE_NAME, TLS_REMOVED_MESSAGE } from "./config.js";
 import { logListeningOn } from "./log-listening-on.js";
 import { createAppHandler } from "./serve-app.js";
 import { createStaticHandler } from "./serve-static.js";
-import type {
-  BunAppHeadersJson,
-  Options,
-  RequestHandler,
-  TlsOptions,
-} from "./types.js";
+import type { BunAppHeadersJson, Options, RequestHandler } from "./types.js";
 
 export const hostOptions = (host: string | boolean) => {
   if (typeof host === "boolean") return host ? "0.0.0.0" : "localhost";
@@ -27,26 +22,21 @@ export function runtimePort(options: Pick<Options, "port">) {
   return port;
 }
 
-function runtimeTls(config: TlsOptions | undefined) {
-  const certPath = config?.certPath ?? process.env.SERVER_CERT_PATH;
-  const keyPath = config?.keyPath ?? process.env.SERVER_KEY_PATH;
-  if (!certPath && !keyPath) return undefined;
-  if (!certPath || !keyPath) {
+const REMOVED_TLS_ENV = [
+  "SERVER_CERT_PATH",
+  "SERVER_KEY_PATH",
+  "SERVER_CA_PATH",
+  "SERVER_KEY_PASSPHRASE",
+];
+
+/** Refuse to start in plaintext when a deployment still expects native TLS. */
+function rejectRemovedTlsEnv() {
+  const configured = REMOVED_TLS_ENV.filter((name) => process.env[name]);
+  if (configured.length) {
     throw new Error(
-      `[${PACKAGE_NAME}] TLS requires both SERVER_CERT_PATH and SERVER_KEY_PATH (or tls.certPath and tls.keyPath).`,
+      `[${PACKAGE_NAME}] ${configured.join(", ")} ${configured.length === 1 ? "is" : "are"} set, but ${TLS_REMOVED_MESSAGE}`,
     );
   }
-
-  const caPath = config?.caPath ?? process.env.SERVER_CA_PATH;
-  const serverName = config?.serverName ?? process.env.SERVER_NAME;
-  const passphrase = process.env.SERVER_KEY_PASSPHRASE;
-  return {
-    cert: Bun.file(certPath),
-    key: Bun.file(keyPath),
-    ...(caPath ? { ca: Bun.file(caPath) } : {}),
-    ...(serverName ? { serverName } : {}),
-    ...(passphrase ? { passphrase } : {}),
-  };
 }
 
 export function createStandaloneHandler(
@@ -71,13 +61,13 @@ export function createServer(
   listener: RequestHandler,
   host: string,
   port: number,
-  options: Pick<Options, "bodySizeLimit" | "idleTimeout" | "reusePort" | "tls">,
+  options: Pick<Options, "bodySizeLimit" | "idleTimeout" | "reusePort">,
 ) {
   let resolveClosed: (() => void) | undefined;
   const closed = new Promise<void>((resolve) => {
     resolveClosed = resolve;
   });
-  const tls = runtimeTls(options.tls);
+  rejectRemovedTlsEnv();
   const server = Bun.serve({
     hostname: host,
     port,
@@ -88,7 +78,6 @@ export function createServer(
     ...(options.bodySizeLimit === undefined
       ? {}
       : { maxRequestBodySize: options.bodySizeLimit }),
-    ...(tls ? { tls } : {}),
     fetch(request, bunServer) {
       const clientAddress = bunServer.requestIP(request)?.address;
       return listener(request, {

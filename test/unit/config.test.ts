@@ -38,9 +38,9 @@ describe("adapter options", () => {
     expect(() =>
       normalizeUserOptions({
         mode: "standalone",
-        tls: { certPath: "", keyPath: "key.pem" },
-      }),
-    ).toThrow("tls");
+        tls: { certPath: "cert.pem", keyPath: "key.pem" },
+      } as never),
+    ).toThrow("reverse proxy");
     for (const workers of [0, 1.5, "2"]) {
       expect(() =>
         normalizeUserOptions({ mode: "standalone", workers } as never),

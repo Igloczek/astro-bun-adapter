@@ -9,10 +9,9 @@ import type { Options, RequestHandler } from "./types.js";
 
 const createPreviewServer: CreatePreviewServer = async (preview) => {
   let handler: RequestHandler;
-  let options: Pick<
-    Options,
-    "bodySizeLimit" | "idleTimeout" | "reusePort" | "tls"
-  > = { reusePort: false };
+  let options: Pick<Options, "bodySizeLimit" | "idleTimeout" | "reusePort"> = {
+    reusePort: false,
+  };
   const previousAutostart = process.env.ASTRO_BUN_AUTOSTART;
 
   try {
