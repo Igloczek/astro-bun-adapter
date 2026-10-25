@@ -14,11 +14,14 @@ export interface SuperviseOptions {
 
 /** Environment variable holding a supervised worker's index, from `0`. */
 export const WORKER_ENV = "ASTRO_BUN_WORKER";
+/** Environment variable holding the supervisor's process ID. */
+export const SUPERVISOR_ENV = "ASTRO_BUN_SUPERVISOR_PID";
+/** Seconds workers get to stop before they are killed. */
+export const SHUTDOWN_TIMEOUT = 10;
 
 const RESTART_DELAY_MS = 500;
 const RESTART_WINDOW_MS = 60_000;
 const RESTARTS_PER_WORKER = 3;
-const DEFAULT_SHUTDOWN_TIMEOUT = 10;
 
 function log(message: string, error?: unknown) {
   console.error(`[${PACKAGE_NAME}] ${message}`, ...(error ? [error] : []));
@@ -27,7 +30,7 @@ function log(message: string, error?: unknown) {
 async function run({
   command,
   workers,
-  shutdownTimeout = DEFAULT_SHUTDOWN_TIMEOUT,
+  shutdownTimeout = SHUTDOWN_TIMEOUT,
 }: SuperviseOptions) {
   if (
     !Array.isArray(command) ||
@@ -100,7 +103,11 @@ async function run({
     let child: Bun.Subprocess;
     try {
       child = Bun.spawn(command, {
-        env: { ...process.env, [WORKER_ENV]: String(index) },
+        env: {
+          ...process.env,
+          [WORKER_ENV]: String(index),
+          [SUPERVISOR_ENV]: String(process.pid),
+        },
         stdin: "ignore",
         stdout: "inherit",
         stderr: "inherit",

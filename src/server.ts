@@ -13,6 +13,7 @@ import standalone, {
 } from "./standalone.js";
 import { supervise } from "./supervisor.js";
 import {
+  isWatching,
   isWorker,
   relaunchCommand,
   stopWithSupervisor,
@@ -27,7 +28,11 @@ if (isWorker) {
 } else if (autostart) {
   await beforeStart();
   const workers = workerCount(config.workers);
-  if (workers > 1) {
+  if (workers > 1 && isWatching()) {
+    console.warn(
+      `[${PACKAGE_NAME}] bun --watch and --hot reload this process in place; running 1 process instead of ${workers} workers.`,
+    );
+  } else if (workers > 1) {
     if (config.mode === "standalone" && runtimePort(config) === 0) {
       throw new AstroError(
         `[${PACKAGE_NAME}] 'workers' requires a fixed PORT; port 0 gives every worker a different port.`,

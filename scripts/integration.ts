@@ -186,12 +186,11 @@ async function testWorkers(script: string, drains: boolean) {
     assert.deepEqual([...seen].sort(), expected, "workers did not all serve");
 
     if (drains) {
-      const slow = fetch(`http://127.0.0.1:${port}/api/slow`);
-      await Bun.sleep(100);
-      supervisor.kill("SIGTERM");
-      const response = await slow;
+      // Headers arrive with the first chunk, once the handler is running.
+      const response = await fetch(`http://127.0.0.1:${port}/api/slow`);
       assert.equal(response.status, 200);
-      assert.equal(await response.text(), "finished");
+      supervisor.kill("SIGTERM");
+      assert.equal(await response.text(), "started finished");
     } else {
       supervisor.kill("SIGTERM");
     }
