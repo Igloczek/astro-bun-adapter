@@ -91,18 +91,17 @@ export function applyImageEndpointOrigin(
 }
 
 /**
- * When `security.allowedDomains` is configured, only a matching `Host` may
- * control `request.url`. Anything else is replaced with
- * `localhost:<serverPort>`, so a forged Host cannot reach `Astro.url`, origin
- * checks, or redirects. Without an allowlist the Host is left untouched.
+ * Only a `Host` that matches `security.allowedDomains` may control
+ * `request.url`. Anything else, including every Host when no allowlist is
+ * configured, is replaced with `localhost:<serverPort>`, so a forged Host
+ * cannot reach `Astro.url`, origin checks, or redirects.
  */
 export function applyTrustedHost(
   request: Request,
-  allowedDomains: readonly unknown[] | undefined,
   hostTrusted: boolean,
   serverPort: number,
 ) {
-  if (!allowedDomains?.length || hostTrusted) return request;
+  if (hostTrusted) return request;
 
   const url = new URL(request.url);
   const fallbackHost = serverPort ? `localhost:${serverPort}` : "localhost";
@@ -175,7 +174,6 @@ export function createAppHandler(
         );
       let incoming = applyTrustedHost(
         forwarded,
-        allowedDomains,
         hostTrusted,
         context.serverPort ?? options.port,
       );

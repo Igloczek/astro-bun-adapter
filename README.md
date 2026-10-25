@@ -114,7 +114,9 @@ The entry module also exports normalized `options` and an idempotent `startServe
 
 ### Allowed domains
 
-Bun builds `request.url` from the client's `Host` header. Configure Astro's [`security.allowedDomains`](https://docs.astro.build/en/reference/configuration-reference/#securityalloweddomains) in production so only your public domains can control `Astro.url`. With an allowlist, any other host is replaced with `localhost:<port>`, so a forged `Host` cannot poison absolute URLs, redirects, or origin checks. Without one, the `Host` header is used as sent.
+The `Host` header only controls `Astro.url` when it matches Astro's [`security.allowedDomains`](https://docs.astro.build/en/reference/configuration-reference/#securityalloweddomains). Any other host is replaced with `localhost:<port>`, so a forged `Host` cannot poison absolute URLs, redirects, or origin checks. This matches `@astrojs/node`.
+
+List your public domains in production. Otherwise `Astro.url` reports `localhost` and `security.checkOrigin` rejects form posts from your real origin:
 
 ```ts
 export default defineConfig({
@@ -125,6 +127,10 @@ export default defineConfig({
 ```
 
 In middleware mode, pass `serverPort` so the fallback origin uses the port your server listens on.
+
+#### Migrating from 0.2
+
+Deployments behind a domain, such as Coolify, Caddy, or Traefik with TLS terminated at the proxy, must add that domain to `security.allowedDomains`. Without it, `Astro.url` reports `https://localhost:<port>` and form posts from the public origin fail `security.checkOrigin` with 403.
 
 ### Image optimization
 

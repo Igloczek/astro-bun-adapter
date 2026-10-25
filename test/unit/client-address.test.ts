@@ -143,28 +143,26 @@ describe("image endpoint origin", () => {
 });
 
 describe("Host validation", () => {
-  const allowlist = [{ hostname: "example.com" }];
-
-  test("leaves the Host untouched without an allowlist", () => {
-    const request = new Request("https://evil.example/");
-    for (const allowedDomains of [undefined, []]) {
-      expect(applyTrustedHost(request, allowedDomains, false, 8080)).toBe(
-        request,
-      );
-    }
+  test("replaces every Host when it is not trusted", () => {
+    const result = applyTrustedHost(
+      new Request("https://example.com/"),
+      false,
+      8080,
+    );
+    expect(result.url).toBe("https://localhost:8080/");
   });
 
   test("keeps a trusted Host", () => {
     const request = new Request("https://example.com/path?q=1");
-    expect(applyTrustedHost(request, allowlist, true, 8080)).toBe(request);
+    expect(applyTrustedHost(request, true, 8080)).toBe(request);
   });
 
-  test("replaces an untrusted Host with localhost", () => {
+  test("keeps the request when replacing an untrusted Host", () => {
     const request = new Request("https://evil.example:9999/path?q=1", {
       method: "POST",
       body: "body",
     });
-    const result = applyTrustedHost(request, allowlist, false, 8080);
+    const result = applyTrustedHost(request, false, 8080);
     expect(result.url).toBe("https://localhost:8080/path?q=1");
     expect(result.method).toBe("POST");
   });

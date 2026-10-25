@@ -4,6 +4,7 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## Unreleased
 
+- **Breaking (security):** without `security.allowedDomains`, the `Host` header no longer controls `request.url`; every request uses `localhost:<port>`, matching `@astrojs/node` 11.1.7. List your public domains in `security.allowedDomains` to keep correct `Astro.url` values and `security.checkOrigin` behind a domain (for example Coolify); see "Migrating from 0.2" in the README.
 - **Security:** when `security.allowedDomains` is configured, only a matching `Host` header controls `request.url` (`Astro.url`, redirects, origin checks); any other host is replaced with `localhost:<port>`. Previously the allowlist was ignored and any `Host` reached `Astro.url`. Without `allowedDomains`, behavior is unchanged.
 - **Security:** Astro's `/_image` endpoint fetches local sources from the request origin, which Bun derives from the client's `Host` header, so a forged `Host` made the server send requests, including the client's headers, to an arbitrary host (SSRF). Unless the `Host` matches `security.allowedDomains`, image endpoint requests now load local sources from the server's own listening address, with forwarded origin headers dropped. The image route is taken from Astro's resolved routes. Middleware handlers accept a new `serverPort` context field for that address.
 - Respect `session: false` (Astro 7.2+): the adapter no longer enables filesystem sessions when sessions are explicitly disabled, so Astro can tree-shake the session runtime.
