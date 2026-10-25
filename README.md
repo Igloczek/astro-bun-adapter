@@ -109,9 +109,20 @@ adapter: bun({
 });
 ```
 
-`workers` runs that many processes on one port (Linux only; elsewhere it runs one). Crashed workers restart. In middleware mode, run your server as usual and pass `options.reusePort` to `Bun.serve()`.
+`workers` runs that many processes on one port (Linux only; elsewhere it runs one). Crashed workers restart.
 
-`beforeStart` runs these modules once, in order, before any worker starts. Use a path relative to the project root, or any import specifier. A default export function is awaited.
+In middleware mode, start the workers from your server. The first process supervises and stops there; each worker runs the rest of the file:
+
+```ts
+// server.ts
+import { handler, options, workers } from "./dist/server/entry.mjs";
+
+if (workers.isSupervisor) await workers.supervise();
+
+Bun.serve({ port: 3000, reusePort: options.reusePort, fetch: handler });
+```
+
+`beforeStart` runs these modules once, in order, before any worker starts (in middleware mode, inside `workers.supervise()`). Use a path relative to the project root, or any import specifier. A default export function is awaited.
 
 ## Options
 

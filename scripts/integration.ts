@@ -213,19 +213,34 @@ async function testWorkers(script: string, drains: boolean) {
 }
 
 async function testMiddlewareWorkers() {
-  await writeFile(
-    path.join(site, "custom-server.ts"),
-    `import { handler, options } from "./dist/server/entry.mjs";
-
+  const server = (
+    supervised: boolean,
+  ) => `import { handler, options, workers } from "./dist/server/entry.mjs";
+${supervised ? "\nif (workers.isSupervisor) await workers.supervise();\n" : ""}
 Bun.serve({
   hostname: process.env.HOST,
   port: Number(process.env.PORT),
   reusePort: options.reusePort,
   fetch: (request) => handler(request),
 });
-`,
-  );
+`;
+  await writeFile(path.join(site, "custom-server.ts"), server(true));
   await testWorkers("custom-server.ts", false);
+
+  // Importing the entry alone must not supervise or run beforeStart.
+  await writeFile(path.join(site, "plain-server.ts"), server(false));
+  const port = await reservePort();
+  const plain = startWorkers("plain-server.ts", port);
+  try {
+    const response = await waitFor(`http://127.0.0.1:${port}/api/worker`);
+    assert.deepEqual(await response.json(), {
+      worker: null,
+      beforeStart: null,
+    });
+  } finally {
+    plain.kill("SIGKILL");
+    await plain.exited;
+  }
 }
 
 async function hashedPixelHref(clientDir: string) {

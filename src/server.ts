@@ -23,25 +23,44 @@ import {
 setGetEnv((key) => process.env[key]);
 
 const autostart = process.env.ASTRO_BUN_AUTOSTART !== "disabled";
-if (isWorker) {
-  stopWithSupervisor();
-} else if (autostart) {
-  await beforeStart();
-  const workers = workerCount(config.workers);
-  if (workers > 1 && isWatching()) {
-    console.warn(
-      `[${PACKAGE_NAME}] bun --watch and --hot reload this process in place; running 1 process instead of ${workers} workers.`,
-    );
-  } else if (workers > 1) {
+const workerTotal = isWorker ? 1 : workerCount(config.workers);
+if (workerTotal > 1 && isWatching()) {
+  console.warn(
+    `[${PACKAGE_NAME}] bun --watch and --hot reload this process in place; running 1 process instead of ${workerTotal} workers.`,
+  );
+}
+
+/** Supervision for the process that starts the server. */
+const workers = {
+  /** `true` in the first process when more than one worker is configured. */
+  isSupervisor: workerTotal > 1 && !isWatching(),
+  /**
+   * Runs `beforeStart`, then starts the workers by running this process's
+   * command again, and exits when they stop. Never returns.
+   */
+  async supervise(): Promise<never> {
+    if (!workers.isSupervisor) {
+      throw new AstroError(
+        `[${PACKAGE_NAME}] workers.supervise() only runs in the first process with 'workers' above 1; check workers.isSupervisor first.`,
+      );
+    }
+    await beforeStart();
     if (config.mode === "standalone" && runtimePort(config) === 0) {
       throw new AstroError(
         `[${PACKAGE_NAME}] 'workers' requires a fixed PORT; port 0 gives every worker a different port.`,
       );
     }
-    // This process only supervises: the workers rerun its command, and this
-    // import never resolves, so a custom server's code runs in the workers.
-    await supervise({ command: relaunchCommand(), workers });
-  }
+    return supervise({ command: relaunchCommand(), workers: workerTotal });
+  },
+};
+
+if (isWorker) stopWithSupervisor();
+
+// A standalone entry is the server, so it supervises itself. In middleware
+// mode the custom server calls workers.supervise() explicitly.
+if (config.mode === "standalone" && autostart && !isWorker) {
+  if (workers.isSupervisor) await workers.supervise();
+  else await beforeStart();
 }
 
 // Supervised workers share one port, including custom servers that pass
@@ -71,4 +90,4 @@ if (options.mode === "standalone" && autostart) {
   }
 }
 
-export { beforeStart, handler, options, startServer };
+export { beforeStart, handler, options, startServer, workers };
