@@ -35,10 +35,11 @@ export interface UserOptions {
    */
   workers?: number;
   /**
-   * Module, relative to the project root, that runs once before the server or
-   * its workers start. A default export function is awaited.
+   * Modules to run once, in order, before the server or its workers start:
+   * paths relative to the project root, or any specifier Vite resolves. A
+   * default export function is awaited.
    */
-  beforeStart?: string;
+  beforeStart?: string | string[];
   /**
    * Bun's HTTP idle timeout in seconds (`0` disables it, maximum `255`).
    * When omitted, Bun's 10-second default is preserved.
@@ -65,6 +66,8 @@ export interface Options extends UserOptions {
   staticHeaders: boolean;
   trustedProxies: string[];
   workers: number;
+  /** Resolved `beforeStart` specifiers; not exposed to the runtime. */
+  beforeStart?: string[];
 }
 
 export interface BunRequestContext {

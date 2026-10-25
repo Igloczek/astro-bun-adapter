@@ -50,9 +50,22 @@ function validateWorkers(value: unknown) {
 }
 
 function validateBeforeStart(value: unknown) {
-  if (value !== undefined && (typeof value !== "string" || value === "")) {
-    optionError("'beforeStart' must be a non-empty module path.");
+  const modules = Array.isArray(value) ? value : [value];
+  if (
+    value !== undefined &&
+    modules.some((module) => typeof module !== "string" || module === "")
+  ) {
+    optionError(
+      "'beforeStart' must be a module specifier or an array of them.",
+    );
   }
+}
+
+function resolveModule(specifier: string, root: URL) {
+  // Relative paths are from the project root; Vite resolves the rest.
+  return /^\.\.?\//.test(specifier)
+    ? fileURLToPath(new URL(specifier, root))
+    : specifier;
 }
 
 function normalizeTrustedProxies(value: string[] | undefined) {
@@ -125,9 +138,9 @@ export function runtimeOptions(
   const { beforeStart, ...rest } = userOptions;
   return {
     ...rest,
-    ...(beforeStart === undefined
-      ? {}
-      : { beforeStart: fileURLToPath(new URL(beforeStart, astroConfig.root)) }),
+    beforeStart: [beforeStart ?? []]
+      .flat()
+      .map((module) => resolveModule(module, astroConfig.root)),
     client,
     experimentalDisableStreaming:
       userOptions.experimentalDisableStreaming ?? false,

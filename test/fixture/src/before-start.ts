@@ -1,4 +1,4 @@
-// Workers inherit the environment, so this shows where the hook ran.
+// Workers inherit the environment, so this shows where the hooks ran.
 export default async function beforeStart() {
-  process.env.FIXTURE_BEFORE_START = String(process.pid);
+  process.env.FIXTURE_BEFORE_START = `${process.pid} first`;
 }

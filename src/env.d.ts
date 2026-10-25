@@ -18,6 +18,6 @@ declare module "virtual:igloczek-astro-bun-adapter:config" {
 }
 
 declare module "virtual:igloczek-astro-bun-adapter:before-start" {
-  /** Runs the `beforeStart` module, if one is configured. */
+  /** Runs the configured `beforeStart` modules in order. */
   export default function beforeStart(): Promise<void>;
 }

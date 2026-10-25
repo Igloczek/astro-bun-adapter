@@ -33,12 +33,15 @@ export function createConfigPlugin(config: Options): VitePlugin {
       handler(id) {
         const { beforeStart, ...options } = config;
         if (id === RESOLVED_VIRTUAL_BEFORE_START_ID) {
-          // Imported on demand, so workers never evaluate the module.
-          return beforeStart === undefined
-            ? "export default async () => {};"
-            : `export default async () => {
-  const module = await import(${JSON.stringify(beforeStart)});
-  if (typeof module.default === "function") await module.default();
+          // Imported on demand, so workers never evaluate the modules.
+          const loaders = (beforeStart ?? []).map(
+            (module) => `() => import(${JSON.stringify(module)})`,
+          );
+          return `export default async () => {
+  for (const load of [${loaders.join(", ")}]) {
+    const module = await load();
+    if (typeof module.default === "function") await module.default();
+  }
 };`;
         }
         return Object.entries(options)

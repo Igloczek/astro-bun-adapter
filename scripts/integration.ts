@@ -127,7 +127,11 @@ async function testPreview() {
     await fetch(`http://127.0.0.1:${port}/api/worker`)
   ).json()) as { worker: string | null; beforeStart: string | null };
   assert.equal(worker.worker, null, "preview must not supervise workers");
-  assert.ok(worker.beforeStart, "preview must run beforeStart");
+  assert.match(
+    worker.beforeStart ?? "",
+    / first second$/,
+    "preview must run beforeStart modules in order",
+  );
   process.kill("SIGTERM");
   assert.ok([0, 143].includes(await process.exited));
 }
@@ -176,7 +180,7 @@ async function testWorkers(script: string, drains: boolean) {
       };
       assert.equal(
         body.beforeStart,
-        String(supervisor.pid),
+        `${supervisor.pid} first second`,
         "beforeStart must run once, in the supervisor",
       );
       seen.add(String(body.worker));

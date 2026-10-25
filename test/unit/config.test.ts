@@ -49,16 +49,19 @@ describe("adapter options", () => {
     expect(normalizeUserOptions({ mode: "middleware", workers: 2 })).toEqual(
       expect.objectContaining({ workers: 2 }),
     );
-    for (const beforeStart of ["", 1]) {
+    for (const beforeStart of ["", 1, ["./ok.ts", ""]]) {
       expect(() =>
         normalizeUserOptions({ mode: "standalone", beforeStart } as never),
       ).toThrow("beforeStart");
     }
   });
 
-  test("resolves beforeStart against the project root", () => {
+  test("resolves relative beforeStart modules against the project root", () => {
     const options = runtimeOptions(
-      { mode: "standalone", beforeStart: "./src/before-start.ts" },
+      {
+        mode: "standalone",
+        beforeStart: ["./src/before-start.ts", "@shared/setup", "../x.ts"],
+      },
       {
         root: new URL("file:///project/"),
         build: {
@@ -68,7 +71,11 @@ describe("adapter options", () => {
         server: { host: false, port: 4321 },
       } as never,
     );
-    expect(options.beforeStart).toBe("/project/src/before-start.ts");
+    expect(options.beforeStart).toEqual([
+      "/project/src/before-start.ts",
+      "@shared/setup",
+      "/x.ts",
+    ]);
     expect(options.workers).toBe(1);
   });
 });

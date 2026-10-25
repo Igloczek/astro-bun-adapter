@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 import { defineConfig } from "astro/config";
 import bun from "@igloczek/astro-bun-adapter";
 
@@ -24,7 +26,7 @@ export default defineConfig({
     trustedProxies: ["127.0.0.1", "::1"],
     // Only used when the entry starts the server; the runner disables that.
     workers: 2,
-    beforeStart: "./src/before-start.ts",
+    beforeStart: ["./src/before-start.ts", "@fixture/before-start"],
   }),
   build: { format: "directory" },
   security: {
@@ -40,4 +42,13 @@ export default defineConfig({
     headers: { "x-adapter-preview": "active" },
   },
   trailingSlash: "never",
+  vite: {
+    resolve: {
+      alias: {
+        "@fixture/before-start": fileURLToPath(
+          new URL("./src/before-start-second.ts", import.meta.url),
+        ),
+      },
+    },
+  },
 });

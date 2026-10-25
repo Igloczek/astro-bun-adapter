@@ -105,13 +105,13 @@ The entry module also exports normalized `options` and an idempotent `startServe
 adapter: bun({
   mode: "standalone",
   workers: 2,
-  beforeStart: "./src/before-start.ts",
+  beforeStart: ["./src/before-start.ts", "@shared/runtime/setup"],
 });
 ```
 
 `workers` runs that many processes on one port (Linux only; elsewhere it runs one). Crashed workers restart. In middleware mode, run your server as usual and pass `options.reusePort` to `Bun.serve()`.
 
-`beforeStart` runs once, before any worker starts. Its default export is awaited.
+`beforeStart` runs these modules once, in order, before any worker starts. Use a path relative to the project root, or any import specifier. A default export function is awaited.
 
 ## Options
 
@@ -122,7 +122,7 @@ adapter: bun({
 | `bodySizeLimit`                | Bun default       | Maximum body bytes; `0`/`Infinity` disables the limit   |
 | `reusePort`                    | `false`           | Allow multiple Bun processes on one port                |
 | `workers`                      | `1`               | Server processes to run on one port (Linux)             |
-| `beforeStart`                  | none              | Module to run once before the server starts             |
+| `beforeStart`                  | none              | Modules to run once before the server starts            |
 | `idleTimeout`                  | Bun default (10s) | `0` disables it; maximum is 255 seconds                 |
 | `trustedProxies`               | `[]`              | Exact proxy IPs allowed to supply `X-Forwarded-For`     |
 | `tls`                          | none              | Certificate/key paths for native TLS                    |
