@@ -5,6 +5,7 @@ All notable changes are documented here. This project follows Semantic Versionin
 ## Unreleased
 
 - Respect `session: false` (Astro 7.2+): the adapter no longer enables filesystem sessions when sessions are explicitly disabled, so Astro can tree-shake the session runtime.
+- Return 404 instead of 500 for unknown parameters on a prerendered dynamic endpoint, matching `@astrojs/node` 11.1.2.
 
 ## 0.2.1 - 2026-08-14
 
