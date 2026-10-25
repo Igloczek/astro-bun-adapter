@@ -18,6 +18,18 @@ export interface UserOptions {
   /** Allows multiple Bun processes to accept connections on the same port. */
   reusePort?: boolean;
   /**
+   * Server processes to run on one port. Above `1`, the process that starts
+   * the server supervises that many workers with `reusePort` (Linux only).
+   * `ASTRO_BUN_WORKERS` overrides it at runtime.
+   */
+  workers?: number;
+  /**
+   * Modules to run once, in order, before the server or its workers start:
+   * paths relative to the project root, or any specifier Vite resolves. A
+   * default export function is awaited.
+   */
+  beforeStart?: string | string[];
+  /**
    * Bun's HTTP idle timeout in seconds (`0` disables it, maximum `255`).
    * When omitted, Bun's 10-second default is preserved.
    */
@@ -40,6 +52,9 @@ export interface Options extends UserOptions {
   server: string;
   staticHeaders: boolean;
   trustedProxies: string[];
+  workers: number;
+  /** Resolved `beforeStart` specifiers; not exposed to the runtime. */
+  beforeStart?: string[];
 }
 
 export interface BunRequestContext {

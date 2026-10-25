@@ -99,6 +99,20 @@ Bun.serve({
 
 The entry module also exports normalized `options` and an idempotent `startServer()` function. Set `ASTRO_BUN_AUTOSTART=disabled` before importing a standalone entry when you need to call `startServer()` yourself.
 
+## Multiple processes
+
+```ts
+adapter: bun({
+  mode: "standalone",
+  workers: 2,
+  beforeStart: ["./src/before-start.ts", "@shared/runtime/setup"],
+});
+```
+
+`workers` runs that many processes on one port (Linux only; elsewhere it runs one). Crashed workers restart. In middleware mode, your own server runs unchanged in every worker; pass `options.reusePort` to `Bun.serve()`.
+
+`beforeStart` runs these modules once, in order, before any worker starts. Use a path relative to the project root, or any import specifier. A default export function is awaited.
+
 ## Options
 
 | Option                         | Default           | Purpose                                                 |
@@ -107,6 +121,8 @@ The entry module also exports normalized `options` and an idempotent `startServe
 | `staticHeaders`                | `false`           | Serve Astro-generated CSP headers for prerendered files |
 | `bodySizeLimit`                | Bun default       | Maximum body bytes; `0`/`Infinity` disables the limit   |
 | `reusePort`                    | `false`           | Allow multiple Bun processes on one port                |
+| `workers`                      | `1`               | Server processes to run on one port (Linux)             |
+| `beforeStart`                  | none              | Modules to run once before the server starts            |
 | `idleTimeout`                  | Bun default (10s) | `0` disables it; maximum is 255 seconds                 |
 | `trustedProxies`               | `[]`              | Exact proxy IPs allowed to supply `X-Forwarded-For`     |
 | `experimentalDisableStreaming` | `false`           | Disable Astro HTML streaming                            |
@@ -169,35 +185,37 @@ Unsupported multi-range requests are safely served as complete `200` responses.
 
 ## Comparison with other Bun adapters
 
-|                               | **This**  | [Nauverse](https://github.com/TheNaubit/astro-bun) | [Wyatt](https://github.com/wyattjoh/astro-bun-adapter) | [Scaliir](https://github.com/ScaliirDigital/root/tree/main/packages/astro-bun) |
-| ----------------------------- | :-------: | :------------------------------------------------: | :----------------------------------------------------: | :----------------------------------------------------------------------------: |
-| Best for                      | SSR apps  |                 Static + some SSR                  |                       SSR + ISR                        |                                 SSR + caching                                  |
-| Declared Astro                | `^7.2.8`  |                       `^7.4`                       |                         `^6.3`                         |                                     `^6.3`                                     |
-| Minimum Bun                   |   1.4.4   |                       1.4.3                        |                          1.0                           |                                      1.3                                       |
-| Latest version                |   0.2.1   |                       0.1.4                        |                         2.1.1                          |                                     0.1.2                                      |
-| **Astro features**            |           |                                                    |                                                        |                                                                                |
-| Astro Image (`/_image`)       |    ✅     |                         ✅                         |                           ✅                           |                                       ✅                                       |
-| Sessions                      |    ✅     |                  ⚠️ needs driver                   |                           ✅                           |                                       ✅                                       |
-| Actions                       |    ✅     |                         ✅                         |                           ✅                           |                                       ✅                                       |
-| Server islands                |    ✅     |                         ✅                         |                           ✅                           |                                       ✅                                       |
-| `astro:env` runtime secrets   |    ✅     |                         ✅                         |                           ✅                           |                                       ✅                                       |
-| Route caching (`Astro.cache`) |    ✅     |                         ✅                         |                           ✅                           |                                       ✅                                       |
-| Middleware                    |    ✅     |                         ✅                         |                           ✅                           |                                       ✅                                       |
-| `Astro.clientAddress`         |    ✅     |                         ✅                         |                     ⚠️ not in ISR                      |                                       ✅                                       |
-| CSP headers                   | ✅ opt-in |                         ✅                         |                           ✅                           |                                       ✅                                       |
-| Custom 404 page               |    ✅     |                         ✅                         |                           ❌                           |                                       ❌                                       |
-| Custom 500 page               |    ✅     |                         ✅                         |                           ✅                           |                                       ✅                                       |
-| `astro preview`               |    ✅     |                         ✅                         |                           ❌                           |                                   ⚠️ config                                    |
-| **Server**                    |           |                                                    |                                                        |                                                                                |
-| Standalone server             |    ✅     |                         ✅                         |                           ✅                           |                                       ✅                                       |
-| Handler for own `Bun.serve()` |    ✅     |                         ✅                         |                           ❌                           |                                       ❌                                       |
-| Trusted proxies (client IP)   |    ✅     |                         ✅                         |                           ❌                           |                                       ❌                                       |
-| Body limit / idle timeout     |    ✅     |                         ✅                         |                           ❌                           |                                       ❌                                       |
-| `reusePort` (Linux)           |    ✅     |                         ✅                         |                           ❌                           |                                       ❌                                       |
-| Multi-process workers         | ⚠️ manual |                         ✅                         |                           ❌                           |                                       ❌                                       |
-| Zero dependencies             |    ✅     |                         ✅                         |                           ❌                           |                                       ✅                                       |
-| Known security issues         |     0     |                         0                          |                           1                            |                                       2                                        |
-| License                       |    MIT    |                        MIT                         |                          MIT                           |                                     BSD-3                                      |
+|                                     | **This**  | [Nauverse](https://github.com/TheNaubit/astro-bun) | [Wyatt](https://github.com/wyattjoh/astro-bun-adapter) | [Scaliir](https://github.com/ScaliirDigital/root/tree/main/packages/astro-bun) |
+| ----------------------------------- | :-------: | :------------------------------------------------: | :----------------------------------------------------: | :----------------------------------------------------------------------------: |
+| Best for                            | SSR apps  |                 Static + some SSR                  |                       SSR + ISR                        |                                 SSR + caching                                  |
+| Declared Astro                      | `^7.2.8`  |                       `^7.4`                       |                         `^6.3`                         |                                     `^6.3`                                     |
+| Minimum Bun                         |   1.4.4   |                       1.4.3                        |                          1.0                           |                                      1.3                                       |
+| Latest version                      |   0.2.1   |                       0.1.4                        |                         2.1.1                          |                                     0.1.2                                      |
+| **Astro features**                  |           |                                                    |                                                        |                                                                                |
+| Astro Image (`/_image`)             |    ✅     |                         ✅                         |                           ✅                           |                                       ✅                                       |
+| Sessions                            |    ✅     |                  ⚠️ needs driver                   |                           ✅                           |                                       ✅                                       |
+| Actions                             |    ✅     |                         ✅                         |                           ✅                           |                                       ✅                                       |
+| Server islands                      |    ✅     |                         ✅                         |                           ✅                           |                                       ✅                                       |
+| `astro:env` runtime secrets         |    ✅     |                         ✅                         |                           ✅                           |                                       ✅                                       |
+| Route caching (`Astro.cache`)       |    ✅     |                         ✅                         |                           ✅                           |                                       ✅                                       |
+| Middleware                          |    ✅     |                         ✅                         |                           ✅                           |                                       ✅                                       |
+| `Astro.clientAddress`               |    ✅     |                         ✅                         |                     ⚠️ not in ISR                      |                                       ✅                                       |
+| CSP headers                         | ✅ opt-in |                         ✅                         |                           ✅                           |                                       ✅                                       |
+| Custom 404 page                     |    ✅     |                         ✅                         |                           ❌                           |                                       ❌                                       |
+| Custom 500 page                     |    ✅     |                         ✅                         |                           ✅                           |                                       ✅                                       |
+| `astro preview`                     |    ✅     |                         ✅                         |                           ❌                           |                                   ⚠️ config                                    |
+| **Server**                          |           |                                                    |                                                        |                                                                                |
+| Standalone server                   |    ✅     |                         ✅                         |                           ✅                           |                                       ✅                                       |
+| Handler for own `Bun.serve()`       |    ✅     |                         ✅                         |                           ❌                           |                                       ❌                                       |
+| Trusted proxies (client IP)         |    ✅     |                         ✅                         |                           ❌                           |                                       ❌                                       |
+| Body limit / idle timeout           |    ✅     |                         ✅                         |                           ❌                           |                                       ❌                                       |
+| `reusePort` (Linux)                 |    ✅     |                         ✅                         |                           ❌                           |                                       ❌                                       |
+| Multi-process workers               |    ✅     |                         ✅                         |                           ❌                           |                                       ❌                                       |
+| Workers with your own `Bun.serve()` |    ✅     |                         ❌                         |                           ❌                           |                                       ❌                                       |
+| Setup before start (`beforeStart`)  |    ✅     |                         ❌                         |                           ❌                           |                                       ❌                                       |
+| Zero dependencies                   |    ✅     |                         ✅                         |                           ❌                           |                                       ✅                                       |
+| Known security issues               |     0     |                         0                          |                           1                            |                                       2                                        |
+| License                             |    MIT    |                        MIT                         |                          MIT                           |                                     BSD-3                                      |
 
 ## Compatibility and releases
 

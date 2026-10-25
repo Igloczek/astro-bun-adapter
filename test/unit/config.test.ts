@@ -5,6 +5,7 @@ import {
   normalizeBodySizeLimit,
   normalizeIdleTimeout,
   normalizeUserOptions,
+  runtimeOptions,
 } from "../../src/config.ts";
 
 describe("adapter options", () => {
@@ -40,5 +41,49 @@ describe("adapter options", () => {
         tls: { certPath: "cert.pem", keyPath: "key.pem" },
       } as never),
     ).toThrow("reverse proxy");
+    for (const workers of [0, 1.5, "2"]) {
+      expect(() =>
+        normalizeUserOptions({ mode: "standalone", workers } as never),
+      ).toThrow("'workers' must be a positive integer");
+    }
+    expect(normalizeUserOptions({ mode: "middleware", workers: 2 })).toEqual(
+      expect.objectContaining({ workers: 2 }),
+    );
+    for (const beforeStart of ["", 1, ["./ok.ts", ""]]) {
+      expect(() =>
+        normalizeUserOptions({ mode: "standalone", beforeStart } as never),
+      ).toThrow("beforeStart");
+    }
+  });
+
+  test("resolves relative beforeStart modules against the project root", () => {
+    const options = runtimeOptions(
+      {
+        mode: "standalone",
+        beforeStart: [
+          "./src/before-start.ts",
+          "@shared/setup",
+          "../x.ts",
+          ".\\src\\windows.ts",
+          "..\\y.ts",
+        ],
+      },
+      {
+        root: new URL("file:///project/"),
+        build: {
+          client: new URL("file:///project/dist/client/"),
+          server: new URL("file:///project/dist/server/"),
+        },
+        server: { host: false, port: 4321 },
+      } as never,
+    );
+    expect(options.beforeStart).toEqual([
+      "/project/src/before-start.ts",
+      "@shared/setup",
+      "/x.ts",
+      "/project/src/windows.ts",
+      "/y.ts",
+    ]);
+    expect(options.workers).toBe(1);
   });
 });

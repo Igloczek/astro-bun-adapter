@@ -123,8 +123,138 @@ async function testPreview() {
   );
   const response = await waitFor(`http://127.0.0.1:${port}/`);
   assert.equal(response.headers.get("x-adapter-preview"), "active");
+  const worker = (await (
+    await fetch(`http://127.0.0.1:${port}/api/worker`)
+  ).json()) as { worker: string | null; beforeStart: string | null };
+  assert.equal(worker.worker, null, "preview must not supervise workers");
+  assert.match(
+    worker.beforeStart ?? "",
+    / first second$/,
+    "preview must run beforeStart modules in order",
+  );
   process.kill("SIGTERM");
   assert.ok([0, 143].includes(await process.exited));
+}
+
+function startWorkers(script: string, port: number) {
+  // A relative --cwd must not be applied again by each worker.
+  return Bun.spawn(["bun", "--cwd", "site", script], {
+    cwd: temporary,
+    env: {
+      ...Bun.env,
+      HOST: "127.0.0.1",
+      PORT: String(port),
+      ASTRO_BUN_LOGGING: "disabled",
+    },
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+}
+
+async function waitForRefused(url: string) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    try {
+      await fetch(url, { keepalive: false });
+    } catch {
+      return;
+    }
+    await Bun.sleep(50);
+  }
+  throw new Error(`${url} is still served`);
+}
+
+async function testWorkers(script: string, drains: boolean) {
+  const port = await reservePort();
+  const url = `http://127.0.0.1:${port}/api/worker`;
+  let supervisor = startWorkers(script, port);
+  try {
+    await waitFor(url);
+    // Bun only balances reusePort connections on Linux.
+    const expected = process.platform === "linux" ? ["0", "1"] : ["0"];
+    const seen = new Set<string>();
+    for (let attempt = 0; attempt < 200 && seen.size < expected.length;) {
+      const response = await fetch(url, { keepalive: false });
+      const body = (await response.json()) as {
+        worker: string | null;
+        beforeStart: string | null;
+      };
+      assert.equal(
+        body.beforeStart,
+        `${supervisor.pid} first second`,
+        "beforeStart must run once, in the supervisor",
+      );
+      seen.add(String(body.worker));
+      attempt += 1;
+      await Bun.sleep(25);
+    }
+    assert.deepEqual([...seen].sort(), expected, "workers did not all serve");
+
+    if (drains) {
+      // Headers arrive with the first chunk, once the handler is running.
+      const response = await fetch(`http://127.0.0.1:${port}/api/slow`);
+      assert.equal(response.status, 200);
+      supervisor.kill("SIGTERM");
+      assert.equal(await response.text(), "started finished");
+    } else {
+      supervisor.kill("SIGTERM");
+    }
+    assert.equal(await supervisor.exited, 0);
+
+    // Workers stop themselves when their supervisor is killed.
+    supervisor = startWorkers(script, port);
+    await waitFor(url);
+    supervisor.kill("SIGKILL");
+    await supervisor.exited;
+    await waitForRefused(url);
+  } finally {
+    supervisor.kill("SIGKILL");
+    await supervisor.exited;
+  }
+}
+
+async function testWorkersRejectRemovedTls() {
+  const port = await reservePort();
+  const supervisor = Bun.spawn(
+    ["bun", "--cwd", "site", "dist/server/entry.mjs"],
+    {
+      cwd: temporary,
+      env: {
+        ...Bun.env,
+        HOST: "127.0.0.1",
+        PORT: String(port),
+        SERVER_CERT_PATH: "cert.pem",
+      },
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+  );
+  const timeout = setTimeout(() => supervisor.kill("SIGKILL"), 10_000);
+  const exitCode = await supervisor.exited;
+  clearTimeout(timeout);
+  const stderr = await new Response(supervisor.stderr).text();
+  assert.notEqual(exitCode, 0);
+  assert.match(stderr, /SERVER_CERT_PATH is set/);
+  assert.doesNotMatch(
+    stderr,
+    /restarting/,
+    "the supervisor must reject removed TLS settings before starting workers",
+  );
+}
+
+async function testMiddlewareWorkers() {
+  await writeFile(
+    path.join(site, "custom-server.ts"),
+    `import { handler, options } from "./dist/server/entry.mjs";
+
+Bun.serve({
+  hostname: process.env.HOST,
+  port: Number(process.env.PORT),
+  reusePort: options.reusePort,
+  fetch: (request) => handler(request),
+});
+`,
+  );
+  await testWorkers("custom-server.ts", false);
 }
 
 async function hashedPixelHref(clientDir: string) {
@@ -305,6 +435,8 @@ async function testStandalone() {
   await symlink("../server/entry.mjs", path.join(built, "client/leak.mjs"));
   await symlink("../server/entry.mjs", path.join(built, "client/leak.svg"));
   await testPreview();
+  await testWorkers("dist/server/entry.mjs", true);
+  await testWorkersRejectRemovedTls();
 
   const relocated = path.join(site, "relocated-dist");
   await rename(built, relocated);
@@ -563,6 +695,7 @@ try {
 
   await run(["bunx", "astro", "build"], site, { ADAPTER_MODE: "middleware" });
   await testMiddleware();
+  await testMiddlewareWorkers();
 
   await run(["bunx", "astro", "build"], site, {
     ADAPTER_MODE: "standalone",

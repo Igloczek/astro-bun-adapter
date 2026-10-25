@@ -1,4 +1,5 @@
 import { isIP } from "node:net";
+import { fileURLToPath } from "node:url";
 
 import { AstroError } from "astro/errors";
 
@@ -38,6 +39,36 @@ export function normalizeIdleTimeout(value: number | undefined) {
   return value;
 }
 
+export function isWorkerCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
+}
+
+function validateWorkers(value: unknown) {
+  if (value !== undefined && !isWorkerCount(value)) {
+    optionError("'workers' must be a positive integer.");
+  }
+}
+
+function validateBeforeStart(value: unknown) {
+  const modules = Array.isArray(value) ? value : [value];
+  if (
+    value !== undefined &&
+    modules.some((module) => typeof module !== "string" || module === "")
+  ) {
+    optionError(
+      "'beforeStart' must be a module specifier or an array of them.",
+    );
+  }
+}
+
+function resolveModule(specifier: string, root: URL) {
+  // Relative paths, with either slash, are from the project root; Vite
+  // resolves the rest.
+  return /^\.\.?[\\/]/.test(specifier)
+    ? fileURLToPath(new URL(specifier.replaceAll("\\", "/"), root))
+    : specifier;
+}
+
 function normalizeTrustedProxies(value: string[] | undefined) {
   if (value === undefined) return [];
   if (!Array.isArray(value) || value.some((address) => isIP(address) === 0)) {
@@ -65,6 +96,8 @@ export function normalizeUserOptions(userOptions: UserOptions): UserOptions {
   );
   validateOptionalBoolean("staticHeaders", userOptions.staticHeaders);
   validateOptionalBoolean("reusePort", userOptions.reusePort);
+  validateWorkers(userOptions.workers);
+  validateBeforeStart(userOptions.beforeStart);
 
   const bodySizeLimit = normalizeBodySizeLimit(userOptions.bodySizeLimit);
   const idleTimeout = normalizeIdleTimeout(userOptions.idleTimeout);
@@ -88,8 +121,12 @@ export function runtimeOptions(
     optionError("Astro did not provide build.client and build.server URLs.");
   }
 
+  const { beforeStart, ...rest } = userOptions;
   return {
-    ...userOptions,
+    ...rest,
+    beforeStart: [beforeStart ?? []]
+      .flat()
+      .map((module) => resolveModule(module, astroConfig.root)),
     client,
     experimentalDisableStreaming:
       userOptions.experimentalDisableStreaming ?? false,
@@ -99,5 +136,6 @@ export function runtimeOptions(
     server,
     staticHeaders: userOptions.staticHeaders ?? false,
     trustedProxies: userOptions.trustedProxies ?? [],
+    workers: userOptions.workers ?? 1,
   };
 }
