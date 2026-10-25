@@ -9,6 +9,7 @@ import createMiddleware from "./middleware.js";
 import { readHeadersJson, resolveOutputDir } from "./shared.js";
 import standalone, {
   createStandaloneHandler,
+  rejectRemovedTlsEnv,
   runtimePort,
 } from "./standalone.js";
 import { supervise } from "./supervisor.js";
@@ -33,10 +34,14 @@ if (isWorker) {
       `[${PACKAGE_NAME}] bun --watch and --hot reload this process in place; running 1 process instead of ${workers} workers.`,
     );
   } else if (workers > 1) {
-    if (config.mode === "standalone" && runtimePort(config) === 0) {
-      throw new AstroError(
-        `[${PACKAGE_NAME}] 'workers' requires a fixed PORT; port 0 gives every worker a different port.`,
-      );
+    if (config.mode === "standalone") {
+      // Fail here once, instead of in every worker until the crash limit.
+      rejectRemovedTlsEnv();
+      if (runtimePort(config) === 0) {
+        throw new AstroError(
+          `[${PACKAGE_NAME}] 'workers' requires a fixed PORT; port 0 gives every worker a different port.`,
+        );
+      }
     }
     // This process only supervises: the workers rerun its command, and this
     // import never resolves, so a custom server's code runs in the workers.

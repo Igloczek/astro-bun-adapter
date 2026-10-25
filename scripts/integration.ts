@@ -212,6 +212,35 @@ async function testWorkers(script: string, drains: boolean) {
   }
 }
 
+async function testWorkersRejectRemovedTls() {
+  const port = await reservePort();
+  const supervisor = Bun.spawn(
+    ["bun", "--cwd", "site", "dist/server/entry.mjs"],
+    {
+      cwd: temporary,
+      env: {
+        ...Bun.env,
+        HOST: "127.0.0.1",
+        PORT: String(port),
+        SERVER_CERT_PATH: "cert.pem",
+      },
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+  );
+  const timeout = setTimeout(() => supervisor.kill("SIGKILL"), 10_000);
+  const exitCode = await supervisor.exited;
+  clearTimeout(timeout);
+  const stderr = await new Response(supervisor.stderr).text();
+  assert.notEqual(exitCode, 0);
+  assert.match(stderr, /SERVER_CERT_PATH is set/);
+  assert.doesNotMatch(
+    stderr,
+    /restarting/,
+    "the supervisor must reject removed TLS settings before starting workers",
+  );
+}
+
 async function testMiddlewareWorkers() {
   await writeFile(
     path.join(site, "custom-server.ts"),
@@ -407,6 +436,7 @@ async function testStandalone() {
   await symlink("../server/entry.mjs", path.join(built, "client/leak.svg"));
   await testPreview();
   await testWorkers("dist/server/entry.mjs", true);
+  await testWorkersRejectRemovedTls();
 
   const relocated = path.join(site, "relocated-dist");
   await rename(built, relocated);

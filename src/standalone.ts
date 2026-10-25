@@ -30,7 +30,7 @@ const REMOVED_TLS_ENV = [
 ];
 
 /** Refuse to start in plaintext when a deployment still expects native TLS. */
-function rejectRemovedTlsEnv() {
+export function rejectRemovedTlsEnv() {
   const configured = REMOVED_TLS_ENV.filter((name) => process.env[name]);
   if (configured.length) {
     throw new Error(
