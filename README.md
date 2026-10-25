@@ -184,6 +184,7 @@ Unsupported multi-range requests are safely served as complete `200` responses.
 | Multi-process workers         | ⚠️ manual |                         ✅                         |                           ❌                           |                                       ❌                                       |
 | WebSockets                    |    ❌     |                         ✅                         |                           ❌                           |                                       ❌                                       |
 | Zero dependencies             |    ✅     |                         ✅                         |                           ❌                           |                                       ✅                                       |
+| Known security issues         |     0     |                         0                          |                           1                            |                                       2                                        |
 | License                       |    MIT    |                        MIT                         |                          MIT                           |                                     BSD-3                                      |
 
 ## Compatibility and releases
