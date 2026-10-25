@@ -15,9 +15,10 @@ if (process.env.ADAPTER_MODE === "middleware") {
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    fetch(request) {
+    fetch(request, bunServer) {
       return serverModule.handler(request, {
         clientAddress: "127.0.0.1",
+        serverPort: bunServer.port,
         locals: { message: "middleware" },
       });
     },

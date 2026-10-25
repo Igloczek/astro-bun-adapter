@@ -1,7 +1,7 @@
 import { isIP } from "node:net";
 import path from "node:path";
 
-import type { BaseApp } from "astro/app";
+import { BaseApp } from "astro/app";
 
 import { resolveClientDir } from "./shared.js";
 import type { BunRequestContext, Options, RequestHandler } from "./types.js";
@@ -49,6 +49,45 @@ export function applyForwardedOrigin(request: Request) {
 
   url.protocol = `${proto}:`;
   return new Request(url, request);
+}
+
+/** Address this server can reach itself on, from its listening host. */
+function selfHost(host: string | boolean) {
+  if (host === false || host === "localhost") return "localhost";
+  if (host === true || host === "" || host === "0.0.0.0") return "127.0.0.1";
+  if (host === "::") return "[::1]";
+  return isIP(host) === 6 ? `[${host}]` : host;
+}
+
+const FORWARDED_ORIGIN_HEADERS = [
+  "x-forwarded-host",
+  "x-forwarded-port",
+  "x-forwarded-proto",
+];
+
+/**
+ * Astro's generic image endpoint loads local sources by fetching them from
+ * `request.url`'s origin, and Bun builds that origin from the client's `Host`
+ * header. Unless the Host is trusted (it matches `security.allowedDomains`),
+ * point image endpoint requests at this server itself so a forged Host cannot
+ * make the server fetch from another host (SSRF). Forwarded origin headers are
+ * dropped so Astro cannot re-apply them to the rewritten URL.
+ */
+export function applyImageEndpointOrigin(
+  incoming: Request,
+  serverUrl: URL,
+  host: string | boolean,
+  serverPort: number,
+  hostTrusted: boolean,
+) {
+  if (hostTrusted) return incoming;
+
+  const url = new URL(incoming.url);
+  url.protocol = serverUrl.protocol;
+  url.host = `${selfHost(host)}:${serverPort}`;
+  const rewritten = new Request(url, incoming);
+  for (const name of FORWARDED_ORIGIN_HEADERS) rewritten.headers.delete(name);
+  return rewritten;
 }
 
 async function readErrorPageFromDisk(
@@ -102,7 +141,7 @@ export function createAppHandler(
     }
 
     try {
-      const incoming = applyForwardedOrigin(request);
+      let incoming = applyForwardedOrigin(request);
       const clientAddress = resolveClientAddress(
         incoming,
         context.clientAddress,
@@ -114,6 +153,25 @@ export function createAppHandler(
       let routeData = app.match(incoming, true);
       if (routeData?.prerender && PRERENDERED_ROUTE_TYPES.has(routeData.type)) {
         routeData = app.match(incoming);
+      }
+      if (
+        routeData?.type === "endpoint" &&
+        routeData.route === options.imageEndpointRoute
+      ) {
+        const allowedDomains = app.getAllowedDomains();
+        const url = new URL(incoming.url);
+        incoming = applyImageEndpointOrigin(
+          incoming,
+          new URL(request.url),
+          options.host,
+          context.serverPort ?? options.port,
+          Boolean(allowedDomains?.length) &&
+            BaseApp.validateForwardedHost(
+              url.host,
+              allowedDomains,
+              url.protocol.slice(0, -1),
+            ),
+        );
       }
       const renderOptions = {
         addCookieHeader: true,
