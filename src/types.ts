@@ -1,16 +1,5 @@
 import type { AstroConfig } from "astro";
 
-export interface TlsOptions {
-  /** Path to the PEM certificate. */
-  certPath: string;
-  /** Path to the PEM private key. */
-  keyPath: string;
-  /** Optional path to a PEM certificate authority bundle. */
-  caPath?: string;
-  /** Optional TLS server name. */
-  serverName?: string;
-}
-
 export interface UserOptions {
   /**
    * `standalone` starts Bun.serve automatically. `middleware` exports a Fetch
@@ -38,8 +27,6 @@ export interface UserOptions {
    * taken from the peer unless the proxy is listed.
    */
   trustedProxies?: string[];
-  /** Native Bun TLS configuration using filesystem paths. */
-  tls?: TlsOptions;
 }
 
 export interface Options extends UserOptions {

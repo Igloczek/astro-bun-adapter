@@ -12,6 +12,5 @@ declare module "virtual:igloczek-astro-bun-adapter:config" {
   export const reusePort: Options["reusePort"];
   export const server: Options["server"];
   export const staticHeaders: Options["staticHeaders"];
-  export const tls: Options["tls"];
   export const trustedProxies: Options["trustedProxies"];
 }

@@ -7,7 +7,6 @@ const servers: ReturnType<typeof createServer>[] = [];
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.stop(true)));
   delete process.env.SERVER_CERT_PATH;
-  delete process.env.SERVER_KEY_PATH;
 });
 
 describe("native Bun server", () => {
@@ -55,12 +54,12 @@ describe("native Bun server", () => {
     await stopping;
   });
 
-  test("rejects partial runtime TLS configuration before listening", () => {
+  test("refuses to start in plaintext when native TLS is still configured", () => {
     process.env.SERVER_CERT_PATH = "cert.pem";
     expect(() =>
       createServer(async () => new Response(), "127.0.0.1", 0, {
         reusePort: false,
       }),
-    ).toThrow("TLS requires both");
+    ).toThrow("SERVER_CERT_PATH is set, but Native TLS was removed");
   });
 });

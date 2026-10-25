@@ -109,7 +109,6 @@ The entry module also exports normalized `options` and an idempotent `startServe
 | `reusePort`                    | `false`           | Allow multiple Bun processes on one port                |
 | `idleTimeout`                  | Bun default (10s) | `0` disables it; maximum is 255 seconds                 |
 | `trustedProxies`               | `[]`              | Exact proxy IPs allowed to supply `X-Forwarded-For`     |
-| `tls`                          | none              | Certificate/key paths for native TLS                    |
 | `experimentalDisableStreaming` | `false`           | Disable Astro HTML streaming                            |
 
 ### Allowed domains
@@ -132,11 +131,13 @@ In middleware mode, pass `serverPort` so the fallback origin uses the port your 
 
 Deployments behind a domain, such as Coolify, Caddy, or Traefik with TLS terminated at the proxy, must add that domain to `security.allowedDomains`. Without it, `Astro.url` reports `https://localhost:<port>` and form posts from the public origin fail `security.checkOrigin` with 403.
 
+Native TLS was removed: the `tls` option and the `SERVER_CERT_PATH`, `SERVER_KEY_PATH`, `SERVER_CA_PATH` and `SERVER_KEY_PASSPHRASE` variables. Terminate TLS at your reverse proxy or load balancer instead. The build fails while `tls` is configured, and the server refuses to start while those variables are set.
+
 ### Image optimization
 
 The adapter uses Astro's built-in image endpoint (`/_image`), which optimizes images on demand. It loads remote sources allowed by `image.domains` / `image.remotePatterns`, and local sources (files in `dist/client` or routes rendered on demand) by requesting them from the server's own origin.
 
-Bun derives that origin from the client's `Host` header, so the adapter only keeps it when it matches Astro's [`security.allowedDomains`](https://docs.astro.build/en/reference/configuration-reference/#securityalloweddomains). Otherwise, local sources are requested from the server's listening address, such as `http://127.0.0.1:<port>`, and forwarded origin headers are dropped, so a forged `Host` or `X-Forwarded-Host` cannot make the server fetch from another host. An allowlist entry without a `port` trusts every port on that hostname, so include `port` when that matters. In middleware mode, pass `serverPort` so that address uses your server's port. With native `tls`, list your domains in `security.allowedDomains`, because the certificate will not match the listening address.
+Bun derives that origin from the client's `Host` header, so the adapter only keeps it when it matches Astro's [`security.allowedDomains`](https://docs.astro.build/en/reference/configuration-reference/#securityalloweddomains). Otherwise, local sources are requested from the server's listening address, such as `http://127.0.0.1:<port>`, and forwarded origin headers are dropped, so a forged `Host` or `X-Forwarded-Host` cannot make the server fetch from another host. An allowlist entry without a `port` trusts every port on that hostname, so include `port` when that matters. In middleware mode, pass `serverPort` so that address uses your server's port.
 
 ### Trusted proxies
 
@@ -152,21 +153,6 @@ bun({
 ```
 
 Use the actual address returned by `Bun.serve().requestIP()`; IPv4-mapped IPv6 addresses and plain IPv4 addresses are distinct strings.
-
-### TLS
-
-```ts
-bun({
-  mode: "standalone",
-  tls: {
-    certPath: "/run/secrets/tls.crt",
-    keyPath: "/run/secrets/tls.key",
-    caPath: "/run/secrets/ca.crt",
-  },
-});
-```
-
-Runtime environment alternatives are `SERVER_CERT_PATH`, `SERVER_KEY_PATH`, `SERVER_CA_PATH`, `SERVER_NAME`, and `SERVER_KEY_PASSPHRASE`. Certificate and key must always be configured together. A reverse proxy terminating TLS is usually simpler.
 
 ## Static serving
 

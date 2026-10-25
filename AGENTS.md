@@ -37,7 +37,7 @@ When Astro ships a new server feature, supporting it is in scope.
 
 These belong to the reverse proxy or CDN, or only help static sites. Don't add them, and don't suggest them as gaps to close:
 
-- TLS termination. The existing `tls` option stays for compatibility; don't build on it.
+- TLS termination. The `tls` option was removed in 0.3.0; don't reintroduce it.
 - HTTP/2 and HTTP/3
 - Brotli/gzip compression, including pre-compressed assets
 - Unix sockets

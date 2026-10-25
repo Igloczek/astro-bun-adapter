@@ -2,7 +2,7 @@ import { isIP } from "node:net";
 
 import { AstroError } from "astro/errors";
 
-import type { Options, TlsOptions, UserOptions } from "./types.js";
+import type { Options, UserOptions } from "./types.js";
 
 export const PACKAGE_NAME = "@igloczek/astro-bun-adapter";
 export const DEFAULT_REUSE_PORT = false;
@@ -48,23 +48,8 @@ function normalizeTrustedProxies(value: string[] | undefined) {
   return [...new Set(value)];
 }
 
-function normalizeTls(value: TlsOptions | undefined) {
-  if (value === undefined) return undefined;
-  if (
-    typeof value !== "object" ||
-    typeof value.certPath !== "string" ||
-    value.certPath.length === 0 ||
-    typeof value.keyPath !== "string" ||
-    value.keyPath.length === 0 ||
-    (value.caPath !== undefined &&
-      (typeof value.caPath !== "string" || value.caPath.length === 0)) ||
-    (value.serverName !== undefined &&
-      (typeof value.serverName !== "string" || value.serverName.length === 0))
-  ) {
-    optionError("'tls' requires non-empty certPath and keyPath strings.");
-  }
-  return { ...value };
-}
+export const TLS_REMOVED_MESSAGE =
+  "Native TLS was removed in 0.3.0. Terminate TLS at a reverse proxy (Caddy, Traefik, nginx, a load balancer) and keep `X-Forwarded-Proto` for the public scheme.";
 
 export function normalizeUserOptions(userOptions: UserOptions): UserOptions {
   if (!userOptions || typeof userOptions !== "object") {
@@ -83,12 +68,12 @@ export function normalizeUserOptions(userOptions: UserOptions): UserOptions {
 
   const bodySizeLimit = normalizeBodySizeLimit(userOptions.bodySizeLimit);
   const idleTimeout = normalizeIdleTimeout(userOptions.idleTimeout);
-  const tls = normalizeTls(userOptions.tls);
+  if ("tls" in userOptions)
+    optionError(`'tls' is no longer supported. ${TLS_REMOVED_MESSAGE}`);
   return {
     ...userOptions,
     ...(bodySizeLimit === undefined ? {} : { bodySizeLimit }),
     ...(idleTimeout === undefined ? {} : { idleTimeout }),
-    ...(tls === undefined ? {} : { tls }),
     trustedProxies: normalizeTrustedProxies(userOptions.trustedProxies),
   };
 }
