@@ -89,6 +89,7 @@ Bun.serve({
     const clientAddress = server.requestIP(request)?.address;
     return handler(request, {
       ...(clientAddress ? { clientAddress } : {}),
+      serverPort: server.port,
       locals: { requestId: crypto.randomUUID() },
     });
   },
@@ -110,11 +111,17 @@ The entry module also exports normalized `options` and an idempotent `startServe
 | `tls`                          | none              | Certificate/key paths for native TLS                    |
 | `experimentalDisableStreaming` | `false`           | Disable Astro HTML streaming                            |
 
+### Image optimization
+
+The adapter uses Astro's built-in image endpoint (`/_image`), which optimizes images on demand. It loads remote sources allowed by `image.domains` / `image.remotePatterns`, and local sources (files in `dist/client` or routes rendered on demand) by requesting them from the server's own origin.
+
+Bun derives that origin from the client's `Host` header, so the adapter only keeps it when it matches Astro's [`security.allowedDomains`](https://docs.astro.build/en/reference/configuration-reference/#securityalloweddomains). Otherwise, local sources are requested from the server's listening address, such as `http://127.0.0.1:<port>`, and forwarded origin headers are dropped, so a forged `Host` or `X-Forwarded-Host` cannot make the server fetch from another host. An allowlist entry without a `port` trusts every port on that hostname, so include `port` when that matters. In middleware mode, pass `serverPort` so that address uses your server's port. With native `tls`, list your domains in `security.allowedDomains`, because the certificate will not match the listening address.
+
 ### Trusted proxies
 
 `X-Forwarded-For` is ignored unless the direct peer is listed in `trustedProxies`. The adapter walks the forwarding chain from right to left and returns the last untrusted address, preventing a client from forging the leftmost value through a well-behaved proxy.
 
-`X-Forwarded-Proto` is applied when the first hop is `http` or `https`. That restores the public scheme behind a TLS-terminating proxy (Coolify, Caddy, Traefik) so Astro's `/_image` endpoint self-fetches `https://your-domain/...` instead of `http://...`. `X-Forwarded-Host` is never applied.
+`X-Forwarded-Proto` is applied when the first hop is `http` or `https`. That restores the public scheme (`Astro.url`, origin checks) behind a TLS-terminating proxy (Coolify, Caddy, Traefik). The adapter never applies `X-Forwarded-Host` itself; Astro applies it, and `X-Forwarded-Proto`/`X-Forwarded-Port`, only when they match `security.allowedDomains`.
 
 ```ts
 bun({

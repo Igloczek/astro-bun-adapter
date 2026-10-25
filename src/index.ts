@@ -9,10 +9,15 @@ import {
   PACKAGE_NAME,
   runtimeOptions,
 } from "./config.js";
+import {
+  findImageEndpointRoute,
+  imageEndpointComponent,
+} from "./image-endpoint-route.js";
 import { STATIC_HEADERS_FILE, writeHeadersJson } from "./shared.js";
 import type {
   BunAppHeadersJson,
   BunRequestContext,
+  Options,
   RequestHandler,
   TlsOptions,
   UserOptions,
@@ -57,6 +62,7 @@ export default function createIntegration(
   const userOptions = normalizeUserOptions(input);
   let config: import("astro").AstroConfig | undefined;
   let routeToHeaders: Map<string, { headers: Headers }> | undefined;
+  let serverOptions: Options | undefined;
 
   return {
     name: PACKAGE_NAME,
@@ -81,6 +87,7 @@ export default function createIntegration(
           };
         }
 
+        serverOptions = runtimeOptions(userOptions, astroConfig);
         updateConfig({
           build: { redirects: false },
           image: {
@@ -95,11 +102,25 @@ export default function createIntegration(
           },
           session,
           vite: {
-            plugins: [
-              createConfigPlugin(runtimeOptions(userOptions, astroConfig)),
-            ],
+            plugins: [createConfigPlugin(serverOptions)],
           },
         });
+      },
+      "astro:routes:resolved": ({ routes, logger }) => {
+        const entrypoint = config?.image.endpoint.entrypoint;
+        if (!serverOptions || !config || !entrypoint) return;
+        // The virtual config module is generated lazily, after routes resolve.
+        const route = findImageEndpointRoute(
+          routes,
+          imageEndpointComponent(entrypoint, config.root),
+        );
+        if (route) {
+          serverOptions.imageEndpointRoute = route;
+        } else if (config.output === "server") {
+          logger.warn(
+            `Could not find the image endpoint route for ${entrypoint}; its requests keep the client Host.`,
+          );
+        }
       },
       "astro:build:generated": ({
         routeToHeaders: generatedRouteToHeaders,

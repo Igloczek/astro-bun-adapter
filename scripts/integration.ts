@@ -211,6 +211,47 @@ async function rawRequest(
   });
 }
 
+async function assertImageIgnoresHost(
+  baseUrl: string,
+  href: string,
+  endpoint = "/_image",
+) {
+  const hits: string[] = [];
+  const record = (request: Request) => {
+    hits.push(request.url);
+    return new Response("internal", { status: 200 });
+  };
+  // The forged Host targets a host no fixture allowlists. The forwarded host
+  // targets 127.0.0.1, which some fixtures allowlist, so Astro would apply it
+  // if the adapter left the forwarded headers in place.
+  const internal = Bun.serve({ hostname: "localhost", port: 0, fetch: record });
+  const forwarded = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: record,
+  });
+  try {
+    const query = new URLSearchParams({ href, w: "1", h: "1", f: "png" });
+    const { status } = await rawRequest(
+      Number(new URL(baseUrl).port),
+      `${endpoint}?${query}`,
+      {
+        "X-Forwarded-Host": `127.0.0.1:${forwarded.port}`,
+        "X-Forwarded-Proto": "https",
+      },
+      `localhost:${internal.port}`,
+    );
+    assert.deepEqual(
+      hits,
+      [],
+      `${endpoint} must not fetch local images from the request Host`,
+    );
+    assert.equal(status, 200, `${endpoint} returned ${status}`);
+  } finally {
+    await Promise.all([internal.stop(true), forwarded.stop(true)]);
+  }
+}
+
 async function rawStatus(port: number, requestPath: string) {
   return (await rawRequest(port, requestPath)).status;
 }
@@ -251,6 +292,7 @@ async function assertPrerenderedRouting(baseUrl: string) {
 async function testStandalone() {
   const built = path.join(site, "dist");
   await symlink("../server/entry.mjs", path.join(built, "client/leak.mjs"));
+  await symlink("../server/entry.mjs", path.join(built, "client/leak.svg"));
   await testPreview();
 
   const relocated = path.join(site, "relocated-dist");
@@ -272,10 +314,15 @@ async function testStandalone() {
     assert.match(home, /data-origin="https:\/\/127\.0\.0\.1:\d+"/);
     await assertCoolifyOrigin(runner.baseUrl);
     await assertPrerenderedRouting(runner.baseUrl);
-    await assertImageLoads(
-      runner.baseUrl,
-      await hashedPixelHref(path.join(site, "relocated-dist/client")),
+    const pixelHref = await hashedPixelHref(
+      path.join(site, "relocated-dist/client"),
     );
+    await assertImageLoads(runner.baseUrl, pixelHref);
+    await assertImageIgnoresHost(runner.baseUrl, pixelHref);
+    // Sources rendered on demand are loaded through the server itself.
+    await assertImageLoads(runner.baseUrl, "/api/pixel.png");
+    await assertImageIgnoresHost(runner.baseUrl, "/api/pixel.png");
+    await assertImageSymlinkContained(runner.baseUrl, "/leak.svg");
 
     response = await fetch(`${runner.baseUrl}/session`);
     assert.equal(response.status, 200);
@@ -361,6 +408,66 @@ async function testStandalone() {
   }
 }
 
+async function assertImageSymlinkContained(baseUrl: string, href: string) {
+  const query = new URLSearchParams({ href, w: "1", h: "1", f: "svg" });
+  const response = await fetch(`${baseUrl}/_image?${query}`);
+  const body = await response.text();
+  assert.notEqual(response.status, 200, "/_image followed a symlink out");
+  assert.doesNotMatch(body, /startServer/, "/_image leaked server code");
+}
+
+async function testBasePathImages(base: string) {
+  await symlink("../server/entry.mjs", path.join(site, "dist/client/leak.svg"));
+  const runner = await startRunner("standalone", "dist/server/entry.mjs");
+  try {
+    const response = await fetch(`${runner.baseUrl}${base}`);
+    assert.equal(response.status, 200);
+    const src = /<img[^>]+src="([^"]+)"/.exec(await response.text())?.[1];
+    assert.ok(
+      src && src.startsWith(`${base}/images?`),
+      `unexpected image URL ${src}`,
+    );
+    // Decode the HTML-escaped ampersands in one pass.
+    const imageUrl = src.replace(/&(?:amp|#38);/g, "&");
+
+    const image = await fetch(`${runner.baseUrl}${imageUrl}`);
+    assert.equal(
+      image.status,
+      200,
+      `${imageUrl} returned ${image.status} with a base and custom image route`,
+    );
+    assert.match(image.headers.get("content-type") ?? "", /^image\//);
+    await assertImageIgnoresHost(
+      runner.baseUrl,
+      new URLSearchParams(imageUrl.split("?")[1]).get("href")!,
+      `${base}/images`,
+    );
+
+    const query = new URLSearchParams({
+      href: `${base}/leak.svg`,
+      w: "1",
+      h: "1",
+      f: "svg",
+    });
+    const leak = await fetch(`${runner.baseUrl}${base}/images?${query}`);
+    assert.notEqual(leak.status, 200, "image route followed a symlink out");
+    assert.doesNotMatch(await leak.text(), /startServer/);
+  } finally {
+    await runner.stop();
+  }
+}
+
+async function testResolvedImageRoute() {
+  const runner = await startRunner("standalone", "dist/server/entry.mjs");
+  try {
+    // Astro serves image.endpoint.route "/images/index.ts" at /images.
+    const href = await hashedPixelHref(path.join(site, "dist/client"));
+    await assertImageIgnoresHost(runner.baseUrl, href, "/images");
+  } finally {
+    await runner.stop();
+  }
+}
+
 async function testMiddleware() {
   const runner = await startRunner("middleware", "dist/server/entry.mjs");
   try {
@@ -377,6 +484,8 @@ async function testMiddleware() {
     assert.match(html, /data-origin="https:\/\/127\.0\.0\.1:\d+"/);
     await assertCoolifyOrigin(runner.baseUrl);
     await assertPrerenderedRouting(runner.baseUrl);
+    await assertImageLoads(runner.baseUrl, "/api/pixel.png");
+    await assertImageIgnoresHost(runner.baseUrl, "/api/pixel.png");
 
     response = await fetch(`${runner.baseUrl}/api/echo`, {
       method: "POST",
@@ -441,6 +550,21 @@ try {
 
   await run(["bunx", "astro", "build"], site, { ADAPTER_MODE: "middleware" });
   await testMiddleware();
+
+  await run(["bunx", "astro", "build"], site, {
+    ADAPTER_MODE: "standalone",
+    // A base containing "/_image" catches loaders that locate the base by
+    // searching for the default endpoint name.
+    FIXTURE_BASE: "/docs/_images",
+    FIXTURE_IMAGE_ROUTE: "/images",
+  });
+  await testBasePathImages("/docs/_images");
+
+  await run(["bunx", "astro", "build"], site, {
+    ADAPTER_MODE: "standalone",
+    FIXTURE_IMAGE_ROUTE: "/images/index.ts",
+  });
+  await testResolvedImageRoute();
 
   console.log(`Integration passed with Astro ${astroVersion}`);
 } finally {

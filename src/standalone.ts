@@ -90,10 +90,10 @@ export function createServer(
     ...(tls ? { tls } : {}),
     fetch(request, bunServer) {
       const clientAddress = bunServer.requestIP(request)?.address;
-      return listener(
-        request,
-        clientAddress === undefined ? undefined : { clientAddress },
-      );
+      return listener(request, {
+        ...(clientAddress === undefined ? {} : { clientAddress }),
+        ...(bunServer.port === undefined ? {} : { serverPort: bunServer.port }),
+      });
     },
     error(error) {
       console.error(error);
@@ -124,7 +124,7 @@ export default function standalone(
   const port = parsePort(process.env.PORT, options.port ?? 8080);
   const host = process.env.HOST ?? hostOptions(options.host);
   const server = createServer(
-    createStandaloneHandler(app, { ...options, port }, headersMap),
+    createStandaloneHandler(app, { ...options, host, port }, headersMap),
     host,
     port,
     options,

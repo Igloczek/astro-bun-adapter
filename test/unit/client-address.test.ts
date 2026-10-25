@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   applyForwardedOrigin,
+  applyImageEndpointOrigin,
   resolveClientAddress,
 } from "../../src/serve-app.ts";
 
@@ -84,5 +85,58 @@ describe("forwarded origin", () => {
     const incoming = applyForwardedOrigin(request);
     expect(incoming.url).toBe("https://cringe-o-meter.com/api/echo");
     expect(await incoming.text()).toBe("request body");
+  });
+});
+
+describe("image endpoint origin", () => {
+  const imageRequest = (url: string) =>
+    new Request(url, {
+      headers: {
+        cookie: "session=1",
+        "x-forwarded-host": "example.com",
+        "x-forwarded-proto": "https",
+      },
+    });
+  const server = new URL("http://evil.example:9999/");
+
+  test("loads sources from this server when the Host is not trusted", () => {
+    const result = applyImageEndpointOrigin(
+      imageRequest("https://evil.example:9999/_image?href=%2Fa.png&w=1"),
+      server,
+      "0.0.0.0",
+      4321,
+      false,
+    );
+    // The listening protocol and address, not X-Forwarded-Proto or Host.
+    expect(result.url).toBe("http://127.0.0.1:4321/_image?href=%2Fa.png&w=1");
+    expect(result.headers.get("cookie")).toBe("session=1");
+    // Astro must not re-apply forwarded origin headers to the rewritten URL.
+    expect(result.headers.get("x-forwarded-host")).toBeNull();
+    expect(result.headers.get("x-forwarded-proto")).toBeNull();
+  });
+
+  test("keeps a Host listed in security.allowedDomains", () => {
+    const request = imageRequest("https://example.com/_image?href=%2Fa.png");
+    expect(
+      applyImageEndpointOrigin(request, server, "0.0.0.0", 4321, true),
+    ).toBe(request);
+  });
+
+  test("maps listening hosts to addresses the server can reach", () => {
+    const origin = (host: string | boolean) =>
+      new URL(
+        applyImageEndpointOrigin(
+          imageRequest("http://evil.example/_image"),
+          server,
+          host,
+          8080,
+          false,
+        ).url,
+      ).host;
+    expect(origin(false)).toBe("localhost:8080");
+    expect(origin(true)).toBe("127.0.0.1:8080");
+    expect(origin("::")).toBe("[::1]:8080");
+    expect(origin("10.0.0.5")).toBe("10.0.0.5:8080");
+    expect(origin("fd00::5")).toBe("[fd00::5]:8080");
   });
 });

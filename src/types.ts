@@ -44,6 +44,8 @@ export interface UserOptions {
 
 export interface Options extends UserOptions {
   client: string;
+  /** Route Astro serves the image endpoint on, without `base` (e.g. `/_image`). */
+  imageEndpointRoute?: string;
   experimentalDisableStreaming: boolean;
   host: string | boolean;
   port: number;
@@ -56,6 +58,13 @@ export interface Options extends UserOptions {
 export interface BunRequestContext {
   /** Direct peer address, normally from `server.requestIP(request)?.address`. */
   clientAddress?: string;
+  /**
+   * Port the request was received on, normally `server.port`. Astro's image
+   * endpoint loads local sources from this server; when the request `Host` is
+   * not trusted, it is sent to `localhost:<serverPort>` instead. Defaults to
+   * Astro's configured `server.port`.
+   */
+  serverPort?: number;
   /** Values exposed as `Astro.locals`. */
   locals?: object;
 }

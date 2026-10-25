@@ -5,6 +5,7 @@ declare module "virtual:igloczek-astro-bun-adapter:config" {
   export const client: Options["client"];
   export const experimentalDisableStreaming: Options["experimentalDisableStreaming"];
   export const host: Options["host"];
+  export const imageEndpointRoute: Options["imageEndpointRoute"];
   export const idleTimeout: Options["idleTimeout"];
   export const mode: Options["mode"];
   export const port: Options["port"];
