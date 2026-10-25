@@ -59,10 +59,10 @@ export interface BunRequestContext {
   /** Direct peer address, normally from `server.requestIP(request)?.address`. */
   clientAddress?: string;
   /**
-   * Port the request was received on, normally `server.port`. Astro's image
-   * endpoint loads local sources from this server; when the request `Host` is
-   * not trusted, it is sent to `localhost:<serverPort>` instead. Defaults to
-   * Astro's configured `server.port`.
+   * Port the request was received on, normally `server.port`. Used for the
+   * `localhost` origin that replaces a `Host` header not listed in
+   * `security.allowedDomains`, and for the address Astro's image endpoint
+   * loads local sources from. Defaults to Astro's configured `server.port`.
    */
   serverPort?: number;
   /** Values exposed as `Astro.locals`. */

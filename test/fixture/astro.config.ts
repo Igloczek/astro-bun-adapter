@@ -24,7 +24,13 @@ export default defineConfig({
     trustedProxies: ["127.0.0.1", "::1"],
   }),
   build: { format: "directory" },
-  security: { csp: true },
+  security: {
+    csp: true,
+    allowedDomains: [
+      { hostname: "127.0.0.1" },
+      { hostname: "cringe-o-meter.com" },
+    ],
+  },
   server: {
     host: "127.0.0.1",
     port: 4321,

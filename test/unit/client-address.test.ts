@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   applyForwardedOrigin,
   applyImageEndpointOrigin,
+  applyTrustedHost,
   resolveClientAddress,
 } from "../../src/serve-app.ts";
 
@@ -138,5 +139,33 @@ describe("image endpoint origin", () => {
     expect(origin("::")).toBe("[::1]:8080");
     expect(origin("10.0.0.5")).toBe("10.0.0.5:8080");
     expect(origin("fd00::5")).toBe("[fd00::5]:8080");
+  });
+});
+
+describe("Host validation", () => {
+  const allowlist = [{ hostname: "example.com" }];
+
+  test("leaves the Host untouched without an allowlist", () => {
+    const request = new Request("https://evil.example/");
+    for (const allowedDomains of [undefined, []]) {
+      expect(applyTrustedHost(request, allowedDomains, false, 8080)).toBe(
+        request,
+      );
+    }
+  });
+
+  test("keeps a trusted Host", () => {
+    const request = new Request("https://example.com/path?q=1");
+    expect(applyTrustedHost(request, allowlist, true, 8080)).toBe(request);
+  });
+
+  test("replaces an untrusted Host with localhost", () => {
+    const request = new Request("https://evil.example:9999/path?q=1", {
+      method: "POST",
+      body: "body",
+    });
+    const result = applyTrustedHost(request, allowlist, false, 8080);
+    expect(result.url).toBe("https://localhost:8080/path?q=1");
+    expect(result.method).toBe("POST");
   });
 });
