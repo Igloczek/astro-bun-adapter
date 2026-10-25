@@ -68,7 +68,7 @@ bun ./dist/server/entry.mjs
 
 ## Middleware
 
-Middleware mode exports a Fetch handler for your own `Bun.serve()`. Your server is responsible for static files.
+Middleware mode exports a Fetch handler for your own `Bun.serve()`. Your server is responsible for the static files in `dist/client`, including the `/_astro/` images that Astro Image optimizes.
 
 ```ts
 // astro.config.ts
