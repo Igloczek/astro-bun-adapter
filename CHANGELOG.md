@@ -2,6 +2,10 @@
 
 All notable changes are documented here. This project follows Semantic Versioning.
 
+## Unreleased
+
+- Respect `session: false` (Astro 7.2+): the adapter no longer enables filesystem sessions when sessions are explicitly disabled, so Astro can tree-shake the session runtime.
+
 ## 0.2.1 - 2026-08-14
 
 - Apply `X-Forwarded-Proto` without a `trustedProxies` allowlist. Coolify and other TLS-terminating proxies do not need their Docker IP listed. `X-Forwarded-For` is still gated. `X-Forwarded-Host` is still ignored.

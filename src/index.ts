@@ -70,7 +70,7 @@ export default function createIntegration(
         config = astroConfig;
         let session = astroConfig.session;
 
-        if (!session?.driver) {
+        if (session !== false && !session?.driver) {
           logger.info("Enabling sessions with filesystem storage");
           session = {
             driver: sessionDrivers.fsLite({

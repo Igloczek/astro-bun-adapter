@@ -391,7 +391,10 @@ try {
     root,
   );
   await cp(fixture, site, { recursive: true });
-  const astroVersion = process.env.ASTRO_VERSION ?? "7.1.6";
+  const { devDependencies } = (await Bun.file(
+    path.join(root, "package.json"),
+  ).json()) as { devDependencies: Record<string, string> };
+  const astroVersion = process.env.ASTRO_VERSION ?? devDependencies.astro;
   await writeFile(
     path.join(site, "package.json"),
     JSON.stringify(
