@@ -122,6 +122,8 @@ Use the address the proxy connects from. For a Docker proxy, find it with `docke
 | `staticHeaders`                | `false`     | Serve Astro-generated CSP headers for prerendered files    |
 | `experimentalDisableStreaming` | `false`     | Disable Astro HTML streaming                               |
 
+The `ASTRO_BUN_WORKERS` environment variable overrides `workers` at runtime.
+
 ## Comparison with other Bun adapters
 
 |                                     | **This** | [Nauverse](https://github.com/TheNaubit/astro-bun) | [Wyatt](https://github.com/wyattjoh/astro-bun-adapter) | [Scaliir](https://github.com/ScaliirDigital/root/tree/main/packages/astro-bun) |
@@ -129,7 +131,7 @@ Use the address the proxy connects from. For a Docker proxy, find it with `docke
 | Best for                            | SSR apps |                 Static + some SSR                  |                       SSR + ISR                        |                                 SSR + caching                                  |
 | Declared Astro                      | `^7.3.3` |                       `^7.4`                       |                         `^6.3`                         |                                     `^6.3`                                     |
 | Minimum Bun                         |  1.4.4   |                       1.4.3                        |                          1.0                           |                                      1.3                                       |
-| Latest version                      |  0.2.1   |                       0.1.4                        |                         2.1.1                          |                                     0.1.2                                      |
+| Latest version                      |  1.0.0   |                       0.1.4                        |                         2.1.1                          |                                     0.1.2                                      |
 | **Astro features**                  |          |                                                    |                                                        |                                                                                |
 | Astro Image (`/_image`)             |    ✅    |                         ✅                         |                           ✅                           |                                       ✅                                       |
 | Sessions                            |    ✅    |                  ⚠️ needs driver                   |                           ✅                           |                                       ✅                                       |
