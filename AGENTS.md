@@ -47,7 +47,7 @@ These belong to the reverse proxy or CDN, only help static sites, or have nothin
 
 ## Working rules
 
-- README-only and other docs changes are committed directly to `main`, with no PR. Code changes go through a PR with a regression test.
+- Code changes go through a PR with a regression test.
 - Requirements and commands are in [CONTRIBUTING.md](./CONTRIBUTING.md). Run `bun run check` before committing code.
 - The README comparison table is a single table with no notes. Every cell about another adapter must come from actually installing and running it, not from its peer range or README. Keep the wording fair to other maintainers. When a gap closes here, update this adapter's column in the same change.
 - Never publish a security vulnerability found in another adapter. Report it privately to its maintainers.
