@@ -64,7 +64,9 @@ describe("worker relaunch", () => {
     expect(shutdownTimeout(10)).toBe(170);
     process.env.ASTRO_BUN_SHUTDOWN_TIMEOUT = "0";
     expect(shutdownTimeout(10)).toBe(0);
-    for (const value of ["-1", "soon", "Infinity"]) {
+    process.env.ASTRO_BUN_SHUTDOWN_TIMEOUT = "2147483";
+    expect(shutdownTimeout(10)).toBe(2_147_483);
+    for (const value of ["-1", "soon", "Infinity", "2147484"]) {
       process.env.ASTRO_BUN_SHUTDOWN_TIMEOUT = value;
       expect(() => shutdownTimeout(10)).toThrow("ASTRO_BUN_SHUTDOWN_TIMEOUT");
     }

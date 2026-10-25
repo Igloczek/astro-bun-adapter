@@ -19,6 +19,21 @@ export default defineConfig({
         },
       }
     : {}),
+  integrations: [
+    {
+      name: "fixture-renderer",
+      hooks: {
+        "astro:config:setup": ({ addRenderer }) => {
+          addRenderer({
+            name: "fixture-renderer",
+            serverEntrypoint: fileURLToPath(
+              new URL("./src/renderer.ts", import.meta.url),
+            ),
+          });
+        },
+      },
+    },
+  ],
   adapter: bun({
     mode,
     bodySizeLimit: 1024 * 1024,

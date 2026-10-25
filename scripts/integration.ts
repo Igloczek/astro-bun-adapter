@@ -142,7 +142,24 @@ async function testPreview() {
   assert.ok([0, 143].includes(await process.exited));
 }
 
-const fetchLog = path.join(temporary, "fetch-pids.log");
+const appLog = path.join(temporary, "app-modules.log");
+const cleanupLog = path.join(temporary, "cleanup.log");
+
+/** Fails instead of hanging when a process doesn't exit. */
+async function exitCode(process: { exited: Promise<number> }, ms = 10_000) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`process did not exit within ${ms}ms`)),
+      ms,
+    );
+  });
+  try {
+    return await Promise.race([process.exited, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 function startWorkers(
   script: string,
@@ -158,7 +175,7 @@ function startWorkers(
       HOST: "127.0.0.1",
       PORT: String(port),
       ASTRO_BUN_LOGGING: "disabled",
-      FIXTURE_FETCH_LOG: fetchLog,
+      FIXTURE_APP_LOG: appLog,
       ...env,
     },
     stdout: "inherit",
@@ -189,7 +206,7 @@ async function waitForRefused(url: string) {
 async function testWorkers(script: string, drains: boolean) {
   const port = await reservePort();
   const url = `http://127.0.0.1:${port}/api/worker`;
-  await writeFile(fetchLog, "");
+  await writeFile(appLog, "");
   let supervisor = startWorkers(script, port);
   try {
     await waitFor(url);
@@ -212,11 +229,19 @@ async function testWorkers(script: string, drains: boolean) {
       await Bun.sleep(25);
     }
     assert.deepEqual([...seen].sort(), expected, "workers did not all serve");
-    const fetchPids = (await readFile(fetchLog, "utf8")).split("\n");
-    assert.ok(
-      !fetchPids.includes(String(supervisor.pid)),
-      "the supervisor must not evaluate the app's src/fetch.ts",
-    );
+    // Workers evaluate the app's fetch handler and renderers; the supervisor,
+    // which serves nothing, must not.
+    const loads = (await readFile(appLog, "utf8")).trim().split("\n");
+    for (const module of ["fetch", "renderer"]) {
+      const pids = loads
+        .filter((line) => line.startsWith(`${module} `))
+        .map((line) => line.split(" ")[1]);
+      assert.ok(pids.length > 0, `no worker evaluated the app's ${module}`);
+      assert.ok(
+        !pids.includes(String(supervisor.pid)),
+        `the supervisor must not evaluate the app's ${module}`,
+      );
+    }
 
     if (drains) {
       // Headers arrive with the first chunk, once the handler is running.
@@ -255,7 +280,7 @@ async function testSingleProcessShutdown() {
     assert.equal(response.status, 200);
     server.kill("SIGTERM");
     assert.equal(await response.text(), "started finished");
-    assert.equal(await server.exited, 0);
+    assert.equal(await exitCode(server), 0);
   } finally {
     server.kill("SIGKILL");
     await server.exited;
@@ -273,7 +298,7 @@ async function testSingleProcessShutdown() {
     const response = await fetch(slow);
     server.kill("SIGTERM");
     await response.text().catch(() => undefined);
-    assert.equal(await server.exited, 1);
+    assert.equal(await exitCode(server), 1);
     assert.match(await readStderr(server), /did not stop within 0\.1s/);
   } finally {
     server.kill("SIGKILL");
@@ -294,7 +319,7 @@ async function testSupervisorShutdownTimeout() {
     const response = await fetch(`http://127.0.0.1:${port}/api/slow`);
     supervisor.kill("SIGTERM");
     await response.text().catch(() => undefined);
-    await supervisor.exited;
+    await exitCode(supervisor);
     assert.match(
       await readStderr(supervisor),
       /Workers did not stop within 0\.1s/,
@@ -302,6 +327,32 @@ async function testSupervisorShutdownTimeout() {
   } finally {
     supervisor.kill("SIGKILL");
     await supervisor.exited;
+  }
+}
+
+async function testAppCleanupOnShutdown() {
+  // The app's own SIGTERM handler must finish after HTTP requests drain, in
+  // a single process and in supervised workers.
+  for (const workers of ["1", "2"]) {
+    const port = await reservePort();
+    await writeFile(cleanupLog, "");
+    const server = startWorkers("dist/server/entry.mjs", port, {
+      ASTRO_BUN_WORKERS: workers,
+      FIXTURE_CLEANUP_LOG: cleanupLog,
+    });
+    try {
+      await waitFor(`http://127.0.0.1:${port}/api/worker`);
+      server.kill("SIGTERM");
+      assert.equal(await exitCode(server), 0);
+      assert.match(
+        await readFile(cleanupLog, "utf8"),
+        /cleaned up/,
+        `the app's SIGTERM cleanup must finish with ${workers} worker(s)`,
+      );
+    } finally {
+      server.kill("SIGKILL");
+      await server.exited;
+    }
   }
 }
 
@@ -593,6 +644,7 @@ async function testStandalone() {
   await testWorkers("dist/server/entry.mjs", true);
   await testSingleProcessShutdown();
   await testSupervisorShutdownTimeout();
+  await testAppCleanupOnShutdown();
   await testWorkersRejectRemovedTls();
 
   const relocated = path.join(site, "relocated-dist");

@@ -1,16 +1,13 @@
+// Only modules that never load the app may be imported statically here: this
+// entry decides first whether the process is a worker supervisor, and a
+// supervisor must not run app code. The app loads from `./app-server.js`.
 import { AstroError } from "astro/errors";
 import { setGetEnv } from "astro/env/setup";
 import runBeforeStart from "virtual:igloczek-astro-bun-adapter:before-start";
 import * as config from "virtual:igloczek-astro-bun-adapter:config";
 
 import { PACKAGE_NAME } from "./config.js";
-import createMiddleware from "./middleware.js";
-import { readHeadersJson, resolveOutputDir } from "./shared.js";
-import standalone, {
-  createStandaloneHandler,
-  rejectRemovedTlsEnv,
-  runtimePort,
-} from "./standalone.js";
+import { rejectRemovedTlsEnv, runtimePort } from "./runtime-env.js";
 import { supervise } from "./supervisor.js";
 import {
   isWatching,
@@ -58,28 +55,14 @@ if (isWorker) {
   }
 }
 
-// Astro's app entrypoint imports the app itself, including a custom
-// `src/fetch.ts`, so it loads only past this point: a supervisor never runs
-// app code.
-const { createApp } = await import("astro/app/entrypoint");
-
 // Supervised workers share one port, including custom servers that pass
 // `options.reusePort` to Bun.serve().
 const options: Omit<Options, "beforeStart"> = isWorker
   ? { ...config, reusePort: true }
   : { ...config };
 
-const app = createApp({ streaming: !options.experimentalDisableStreaming });
-const headersMap = options.staticHeaders
-  ? await readHeadersJson(resolveOutputDir(options))
-  : undefined;
-const handler =
-  options.mode === "middleware"
-    ? createMiddleware(app, options)
-    : createStandaloneHandler(app, options, headersMap);
-
-let running: ReturnType<typeof standalone> | undefined;
-const startServer = () => (running ??= standalone(app, options, headersMap));
+const { createAppServer } = await import("./app-server.js");
+const { handler, startServer } = await createAppServer(options);
 
 if (options.mode === "standalone" && autostart) {
   const { stop } = startServer();
@@ -88,7 +71,7 @@ if (options.mode === "standalone" && autostart) {
   // hang, and a terminal's Ctrl+C reaches workers twice, so only a process
   // without a supervisor enforces the timeout and treats a repeat as a kill.
   let stopping = false;
-  const drain = () => {
+  const drain = (signal: NodeJS.Signals) => {
     if (stopping) {
       if (!isWorker) process.exit(1);
       return;
@@ -102,7 +85,13 @@ if (options.mode === "standalone" && autostart) {
         process.exit(1);
       }, stopTimeout * 1000).unref();
     }
-    void stop().then(() => process.exit(0));
+    void stop().then(() => {
+      // An app that handles the signal too owns the rest of its cleanup, so
+      // the process exits once that finishes, within the timeout. Otherwise
+      // nothing is left to wait for, open connections included.
+      if (process.listenerCount(signal) > 1) process.exitCode = 0;
+      else process.exit(0);
+    });
   };
   process.on("SIGINT", drain);
   process.on("SIGTERM", drain);

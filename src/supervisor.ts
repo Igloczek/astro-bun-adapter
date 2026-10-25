@@ -1,6 +1,7 @@
 import {
   DEFAULT_SHUTDOWN_TIMEOUT,
   isShutdownTimeout,
+  MAX_SHUTDOWN_TIMEOUT,
   PACKAGE_NAME,
 } from "./config.js";
 
@@ -50,7 +51,7 @@ async function run({
   }
   if (!isShutdownTimeout(shutdownTimeout)) {
     throw new TypeError(
-      `[${PACKAGE_NAME}] 'shutdownTimeout' must be a non-negative number of seconds.`,
+      `[${PACKAGE_NAME}] 'shutdownTimeout' must be a number of seconds from 0 through ${MAX_SHUTDOWN_TIMEOUT}.`,
     );
   }
 

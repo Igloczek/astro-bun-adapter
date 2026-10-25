@@ -49,10 +49,12 @@ describe("adapter options", () => {
     expect(normalizeUserOptions({ mode: "middleware", workers: 2 })).toEqual(
       expect.objectContaining({ workers: 2 }),
     );
-    for (const shutdownTimeout of [-1, Number.NaN, Infinity, "10"]) {
+    for (const shutdownTimeout of [-1, Number.NaN, Infinity, 2_147_484, "10"]) {
       expect(() =>
         normalizeUserOptions({ mode: "standalone", shutdownTimeout } as never),
-      ).toThrow("'shutdownTimeout' must be a non-negative number of seconds");
+      ).toThrow(
+        "'shutdownTimeout' must be a number of seconds from 0 through 2147483",
+      );
     }
     expect(
       normalizeUserOptions({ mode: "middleware", shutdownTimeout: 0.5 }),

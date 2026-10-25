@@ -41,8 +41,13 @@ export function normalizeIdleTimeout(value: number | undefined) {
   return value;
 }
 
+/** The longest delay a timer supports (2^31 - 1 ms), in whole seconds. */
+export const MAX_SHUTDOWN_TIMEOUT = Math.floor((2 ** 31 - 1) / 1000);
+
 export function isShutdownTimeout(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+  return (
+    typeof value === "number" && value >= 0 && value <= MAX_SHUTDOWN_TIMEOUT
+  );
 }
 
 export function isWorkerCount(value: unknown): value is number {
@@ -57,7 +62,9 @@ function validateWorkers(value: unknown) {
 
 function validateShutdownTimeout(value: unknown) {
   if (value !== undefined && !isShutdownTimeout(value)) {
-    optionError("'shutdownTimeout' must be a non-negative number of seconds.");
+    optionError(
+      `'shutdownTimeout' must be a number of seconds from 0 through ${MAX_SHUTDOWN_TIMEOUT}.`,
+    );
   }
 }
 

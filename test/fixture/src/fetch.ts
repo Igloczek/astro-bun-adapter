@@ -2,10 +2,18 @@ import { appendFileSync } from "node:fs";
 
 import { DefaultFetchHandler } from "astro/app/fetch/default-handler";
 
-// Records every process that evaluates the app's fetch handler, so the worker
-// tests can check the supervisor never runs app code.
-if (process.env.FIXTURE_FETCH_LOG) {
-  appendFileSync(process.env.FIXTURE_FETCH_LOG, `${process.pid}\n`);
+import { logAppModule } from "./app-log";
+
+logAppModule("fetch");
+
+// App-owned cleanup on shutdown, like closing a job queue: the server must
+// let it finish instead of exiting once HTTP requests are drained.
+const cleanupLog = process.env.FIXTURE_CLEANUP_LOG;
+if (cleanupLog) {
+  process.on("SIGTERM", async () => {
+    await Bun.sleep(300);
+    appendFileSync(cleanupLog, "cleaned up\n");
+  });
 }
 
 export default new DefaultFetchHandler();

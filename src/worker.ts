@@ -4,6 +4,7 @@ import {
   DEFAULT_SHUTDOWN_TIMEOUT,
   isShutdownTimeout,
   isWorkerCount,
+  MAX_SHUTDOWN_TIMEOUT,
   PACKAGE_NAME,
 } from "./config.js";
 import { SUPERVISOR_ENV, WORKER_ENV } from "./supervisor.js";
@@ -30,7 +31,7 @@ export function shutdownTimeout(configured: number) {
   const seconds = Number(value);
   if (!isShutdownTimeout(seconds)) {
     throw new AstroError(
-      `[${PACKAGE_NAME}] ASTRO_BUN_SHUTDOWN_TIMEOUT must be a non-negative number of seconds.`,
+      `[${PACKAGE_NAME}] ASTRO_BUN_SHUTDOWN_TIMEOUT must be a number of seconds from 0 through ${MAX_SHUTDOWN_TIMEOUT}.`,
     );
   }
   return seconds;
