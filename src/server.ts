@@ -23,17 +23,26 @@ import {
 setGetEnv((key) => process.env[key]);
 
 const autostart = process.env.ASTRO_BUN_AUTOSTART !== "disabled";
-const workerTotal = isWorker ? 1 : workerCount(config.workers);
-if (workerTotal > 1 && isWatching()) {
-  console.warn(
-    `[${PACKAGE_NAME}] bun --watch and --hot reload this process in place; running 1 process instead of ${workerTotal} workers.`,
-  );
+let workerTotal: number | undefined;
+// Read on first use, so importing the entry doesn't validate or warn.
+function configuredWorkers() {
+  if (workerTotal !== undefined) return workerTotal;
+  workerTotal = isWorker ? 1 : workerCount(config.workers);
+  if (workerTotal > 1 && isWatching()) {
+    console.warn(
+      `[${PACKAGE_NAME}] bun --watch and --hot reload this process in place; running 1 process instead of ${workerTotal} workers.`,
+    );
+    workerTotal = 1;
+  }
+  return workerTotal;
 }
 
 /** Supervision for the process that starts the server. */
 const workers = {
   /** `true` in the first process when more than one worker is configured. */
-  isSupervisor: workerTotal > 1 && !isWatching(),
+  get isSupervisor() {
+    return configuredWorkers() > 1;
+  },
   /**
    * Runs `beforeStart`, then starts the workers by running this process's
    * command again, and exits when they stop. Never returns.
@@ -50,7 +59,10 @@ const workers = {
         `[${PACKAGE_NAME}] 'workers' requires a fixed PORT; port 0 gives every worker a different port.`,
       );
     }
-    return supervise({ command: relaunchCommand(), workers: workerTotal });
+    return supervise({
+      command: relaunchCommand(),
+      workers: configuredWorkers(),
+    });
   },
 };
 
