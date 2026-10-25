@@ -31,6 +31,9 @@ async function files(directory: string): Promise<string[]> {
 
 try {
   await run(["bun", "run", "build"]);
+  // Consumers can't resolve the build-time virtual modules, so the published
+  // declarations must type every entry export without them.
+  await run(["bunx", "tsc", "-p", "test/types/tsconfig.json"]);
   await run([
     "bun",
     "pm",
@@ -71,6 +74,14 @@ try {
     packedFiles.every((file) => !file.endsWith(".tsbuildinfo")),
     "TypeScript build metadata was included in the package",
   );
+
+  for (const file of packedFiles.filter((name) => name.endsWith(".d.ts"))) {
+    const declaration = await readFile(path.join(packageRoot, file), "utf8");
+    assert.ok(
+      !declaration.includes("virtual:"),
+      `${file} imports a virtual module consumers can't resolve`,
+    );
+  }
 
   const manifest = JSON.parse(
     await readFile(path.join(packageRoot, "package.json"), "utf8"),

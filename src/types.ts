@@ -64,7 +64,8 @@ export interface BunRequestContext {
    * Port the request was received on, normally `server.port`. Used for the
    * `localhost` origin that replaces a `Host` header not listed in
    * `security.allowedDomains`, and for the address Astro's image endpoint
-   * loads local sources from. Defaults to Astro's configured `server.port`.
+   * loads local sources from. Defaults to `PORT`, then Astro's configured
+   * `server.port`.
    */
   serverPort?: number;
   /** Values exposed as `Astro.locals`. */

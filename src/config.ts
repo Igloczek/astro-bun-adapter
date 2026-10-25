@@ -80,7 +80,7 @@ function normalizeTrustedProxies(value: string[] | undefined) {
 }
 
 export const TLS_REMOVED_MESSAGE =
-  "Native TLS was removed in 0.3.0. Terminate TLS at a reverse proxy (Caddy, Traefik, nginx, a load balancer) and keep `X-Forwarded-Proto` for the public scheme.";
+  "Native TLS was removed in 1.0.0. Terminate TLS at a reverse proxy (Caddy, Traefik, nginx, a load balancer) and keep `X-Forwarded-Proto` for the public scheme.";
 
 export function normalizeUserOptions(userOptions: UserOptions): UserOptions {
   if (!userOptions || typeof userOptions !== "object") {

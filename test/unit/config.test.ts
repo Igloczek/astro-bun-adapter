@@ -40,7 +40,7 @@ describe("adapter options", () => {
         mode: "standalone",
         tls: { certPath: "cert.pem", keyPath: "key.pem" },
       } as never),
-    ).toThrow("reverse proxy");
+    ).toThrow("'tls' is no longer supported. Native TLS was removed in 1.0.0.");
     for (const workers of [0, 1.5, "2"]) {
       expect(() =>
         normalizeUserOptions({ mode: "standalone", workers } as never),
