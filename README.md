@@ -100,6 +100,14 @@ export default defineConfig({
 });
 ```
 
+To get the visitor's IP in `Astro.clientAddress` instead of the proxy's, list the proxy's IP in `trustedProxies`:
+
+```ts
+adapter: bun({ mode: "standalone", trustedProxies: ["10.0.1.5"] });
+```
+
+Use the address the proxy connects from. For a Docker proxy, find it with `docker inspect <proxy-container>`.
+
 ## Options
 
 | Option                         | Default     | Purpose                                                    |
