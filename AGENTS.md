@@ -25,7 +25,7 @@ When Astro ships a new server feature, supporting it is in scope.
 - Standalone server, and a Fetch handler (middleware mode) for embedding in your own `Bun.serve()`.
 - Safe serving of Astro's built assets: traversal and symlink containment, dotfile denial, clean `400` for malformed URLs.
 - Request body limits, idle timeouts, and multiple processes on one port (`reusePort`).
-- Server features from the comparison table that are still missing, such as WebSockets.
+- Server features from the comparison table that are still missing.
 
 **Constraints:**
 
@@ -35,9 +35,10 @@ When Astro ships a new server feature, supporting it is in scope.
 
 ## What doesn't matter
 
-These belong to the reverse proxy or CDN, or only help static sites. Don't add them, and don't suggest them as gaps to close:
+These belong to the reverse proxy or CDN, only help static sites, or have nothing to do with Astro. Don't add them, and don't suggest them as gaps to close:
 
 - TLS termination. The `tls` option was removed in 0.3.0; don't reintroduce it.
+- WebSockets, or any other `Bun.serve()` option exposed just because Bun has it. Astro has no WebSocket API, so there is nothing to integrate; apps that need sockets own their `Bun.serve()` in middleware mode.
 - HTTP/2 and HTTP/3
 - Brotli/gzip compression, including pre-compressed assets
 - Unix sockets
