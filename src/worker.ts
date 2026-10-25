@@ -1,7 +1,12 @@
 import { AstroError } from "astro/errors";
 
-import { isWorkerCount, PACKAGE_NAME } from "./config.js";
-import { SHUTDOWN_TIMEOUT, SUPERVISOR_ENV, WORKER_ENV } from "./supervisor.js";
+import {
+  DEFAULT_SHUTDOWN_TIMEOUT,
+  isShutdownTimeout,
+  isWorkerCount,
+  PACKAGE_NAME,
+} from "./config.js";
+import { SUPERVISOR_ENV, WORKER_ENV } from "./supervisor.js";
 
 export const isWorker = process.env[WORKER_ENV] !== undefined;
 
@@ -16,6 +21,19 @@ export function workerCount(configured: number) {
     );
   }
   return count;
+}
+
+/** The configured shutdown timeout, overridden by `ASTRO_BUN_SHUTDOWN_TIMEOUT`. */
+export function shutdownTimeout(configured: number) {
+  const value = process.env.ASTRO_BUN_SHUTDOWN_TIMEOUT;
+  if (value === undefined || value === "") return configured;
+  const seconds = Number(value);
+  if (!isShutdownTimeout(seconds)) {
+    throw new AstroError(
+      `[${PACKAGE_NAME}] ASTRO_BUN_SHUTDOWN_TIMEOUT must be a non-negative number of seconds.`,
+    );
+  }
+  return seconds;
 }
 
 /** Whether Bun reloads this process in place, which workers can't follow. */
@@ -49,7 +67,7 @@ export function relaunchCommand(
  * doesn't leave workers serving the port. The worker gets `SIGTERM`, then is
  * forced to exit after the shutdown timeout the supervisor would enforce.
  */
-export function stopWithSupervisor(timeout = SHUTDOWN_TIMEOUT) {
+export function stopWithSupervisor(timeout = DEFAULT_SHUTDOWN_TIMEOUT) {
   const supervisor = Number(process.env[SUPERVISOR_ENV]) || process.ppid;
   const check = () => {
     if (process.ppid === supervisor) return;

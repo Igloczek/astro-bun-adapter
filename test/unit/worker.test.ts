@@ -4,7 +4,12 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { isWatching, relaunchCommand, workerCount } from "../../src/worker.ts";
+import {
+  isWatching,
+  relaunchCommand,
+  shutdownTimeout,
+  workerCount,
+} from "../../src/worker.ts";
 
 const workerModule = fileURLToPath(
   new URL("../../src/worker.ts", import.meta.url),
@@ -28,6 +33,7 @@ afterEach(() => {
   process.execArgv = execArgv;
   process.argv = argv;
   delete process.env.ASTRO_BUN_WORKERS;
+  delete process.env.ASTRO_BUN_SHUTDOWN_TIMEOUT;
 });
 
 describe("worker relaunch", () => {
@@ -50,6 +56,18 @@ describe("worker relaunch", () => {
     expect(workerCount(2)).toBe(4);
     process.env.ASTRO_BUN_WORKERS = "0";
     expect(() => workerCount(2)).toThrow("ASTRO_BUN_WORKERS");
+  });
+
+  test("ASTRO_BUN_SHUTDOWN_TIMEOUT overrides the configured timeout", () => {
+    expect(shutdownTimeout(10)).toBe(10);
+    process.env.ASTRO_BUN_SHUTDOWN_TIMEOUT = "170";
+    expect(shutdownTimeout(10)).toBe(170);
+    process.env.ASTRO_BUN_SHUTDOWN_TIMEOUT = "0";
+    expect(shutdownTimeout(10)).toBe(0);
+    for (const value of ["-1", "soon", "Infinity"]) {
+      process.env.ASTRO_BUN_SHUTDOWN_TIMEOUT = value;
+      expect(() => shutdownTimeout(10)).toThrow("ASTRO_BUN_SHUTDOWN_TIMEOUT");
+    }
   });
 
   test("relaunches a compiled executable without its embedded entry", () => {

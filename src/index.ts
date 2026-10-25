@@ -13,6 +13,7 @@ import {
   findImageEndpointRoute,
   imageEndpointComponent,
 } from "./image-endpoint-route.js";
+import { writeEntryDeclaration } from "./entry-declaration.js";
 import { STATIC_HEADERS_FILE, writeHeadersJson } from "./shared.js";
 import type {
   BunAppHeadersJson,
@@ -130,7 +131,12 @@ export default function createIntegration(
         setAdapter(getAdapter(userOptions));
       },
       "astro:build:done": async () => {
-        if (!config || !routeToHeaders?.size || !config.security.csp) return;
+        if (!config) return;
+        await writeEntryDeclaration(
+          config.build.server,
+          config.build.serverEntry,
+        );
+        if (!routeToHeaders?.size || !config.security.csp) return;
 
         const headersValue: BunAppHeadersJson = [];
         for (const [pathname, { headers }] of routeToHeaders) {

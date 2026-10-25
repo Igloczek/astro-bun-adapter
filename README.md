@@ -115,6 +115,7 @@ Use the address the proxy connects from. For a Docker proxy, find it with `docke
 | `mode`                         | required    | `standalone` or `middleware`                               |
 | `workers`                      | `1`         | Server processes on one port (Linux); crashed ones restart |
 | `beforeStart`                  | none        | Modules to run once before the server starts               |
+| `shutdownTimeout`              | `10`        | Seconds to finish in-flight requests on SIGTERM/SIGINT     |
 | `reusePort`                    | `false`     | Allow multiple Bun processes on one port                   |
 | `bodySizeLimit`                | Bun default | Maximum request body bytes                                 |
 | `idleTimeout`                  | `10`        | Seconds before an idle connection closes                   |
@@ -122,7 +123,7 @@ Use the address the proxy connects from. For a Docker proxy, find it with `docke
 | `staticHeaders`                | `false`     | Serve Astro-generated CSP headers for prerendered files    |
 | `experimentalDisableStreaming` | `false`     | Disable Astro HTML streaming                               |
 
-The `ASTRO_BUN_WORKERS` environment variable overrides `workers` at runtime.
+The `ASTRO_BUN_WORKERS` and `ASTRO_BUN_SHUTDOWN_TIMEOUT` environment variables override `workers` and `shutdownTimeout` at runtime.
 
 ## Comparison with other Bun adapters
 
@@ -131,7 +132,7 @@ The `ASTRO_BUN_WORKERS` environment variable overrides `workers` at runtime.
 | Best for                            | SSR apps |                 Static + some SSR                  |                       SSR + ISR                        |                                 SSR + caching                                  |
 | Declared Astro                      | `^7.3.3` |                       `^7.4`                       |                         `^6.3`                         |                                     `^6.3`                                     |
 | Minimum Bun                         |  1.4.4   |                       1.4.3                        |                          1.0                           |                                      1.3                                       |
-| Latest version                      |  1.0.0   |                       0.1.4                        |                         2.1.1                          |                                     0.1.2                                      |
+| Latest version                      |  1.1.0   |                       0.1.4                        |                         2.1.1                          |                                     0.1.2                                      |
 | **Astro features**                  |          |                                                    |                                                        |                                                                                |
 | Astro Image (`/_image`)             |    ✅    |                         ✅                         |                           ✅                           |                                       ✅                                       |
 | Sessions                            |    ✅    |                  ⚠️ needs driver                   |                           ✅                           |                                       ✅                                       |

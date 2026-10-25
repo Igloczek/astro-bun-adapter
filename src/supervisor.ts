@@ -1,4 +1,8 @@
-import { PACKAGE_NAME } from "./config.js";
+import {
+  DEFAULT_SHUTDOWN_TIMEOUT,
+  isShutdownTimeout,
+  PACKAGE_NAME,
+} from "./config.js";
 
 export interface SuperviseOptions {
   /** Command that starts one worker. */
@@ -16,8 +20,6 @@ export interface SuperviseOptions {
 export const WORKER_ENV = "ASTRO_BUN_WORKER";
 /** Environment variable holding the supervisor's process ID. */
 export const SUPERVISOR_ENV = "ASTRO_BUN_SUPERVISOR_PID";
-/** Seconds workers get to stop before they are killed. */
-export const SHUTDOWN_TIMEOUT = 10;
 
 const RESTART_DELAY_MS = 500;
 const RESTART_WINDOW_MS = 60_000;
@@ -30,7 +32,7 @@ function log(message: string, error?: unknown) {
 async function run({
   command,
   workers,
-  shutdownTimeout = SHUTDOWN_TIMEOUT,
+  shutdownTimeout = DEFAULT_SHUTDOWN_TIMEOUT,
 }: SuperviseOptions) {
   if (
     !Array.isArray(command) ||
@@ -46,7 +48,7 @@ async function run({
       `[${PACKAGE_NAME}] 'workers' must be a positive integer.`,
     );
   }
-  if (!Number.isFinite(shutdownTimeout) || shutdownTimeout < 0) {
+  if (!isShutdownTimeout(shutdownTimeout)) {
     throw new TypeError(
       `[${PACKAGE_NAME}] 'shutdownTimeout' must be a non-negative number of seconds.`,
     );

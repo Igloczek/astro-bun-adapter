@@ -142,7 +142,14 @@ async function testPreview() {
   assert.ok([0, 143].includes(await process.exited));
 }
 
-function startWorkers(script: string, port: number) {
+const fetchLog = path.join(temporary, "fetch-pids.log");
+
+function startWorkers(
+  script: string,
+  port: number,
+  env: Record<string, string> = {},
+  stderr: "inherit" | "pipe" = "inherit",
+) {
   // A relative --cwd must not be applied again by each worker.
   return Bun.spawn(["bun", "--cwd", "site", script], {
     cwd: temporary,
@@ -151,10 +158,20 @@ function startWorkers(script: string, port: number) {
       HOST: "127.0.0.1",
       PORT: String(port),
       ASTRO_BUN_LOGGING: "disabled",
+      FIXTURE_FETCH_LOG: fetchLog,
+      ...env,
     },
     stdout: "inherit",
-    stderr: "inherit",
+    stderr,
   });
+}
+
+async function readStderr(process: ReturnType<typeof startWorkers>) {
+  const stderr = await new Response(
+    process.stderr as ReadableStream<Uint8Array>,
+  ).text();
+  globalThis.process.stderr.write(stderr);
+  return stderr;
 }
 
 async function waitForRefused(url: string) {
@@ -172,6 +189,7 @@ async function waitForRefused(url: string) {
 async function testWorkers(script: string, drains: boolean) {
   const port = await reservePort();
   const url = `http://127.0.0.1:${port}/api/worker`;
+  await writeFile(fetchLog, "");
   let supervisor = startWorkers(script, port);
   try {
     await waitFor(url);
@@ -194,6 +212,11 @@ async function testWorkers(script: string, drains: boolean) {
       await Bun.sleep(25);
     }
     assert.deepEqual([...seen].sort(), expected, "workers did not all serve");
+    const fetchPids = (await readFile(fetchLog, "utf8")).split("\n");
+    assert.ok(
+      !fetchPids.includes(String(supervisor.pid)),
+      "the supervisor must not evaluate the app's src/fetch.ts",
+    );
 
     if (drains) {
       // Headers arrive with the first chunk, once the handler is running.
@@ -212,6 +235,70 @@ async function testWorkers(script: string, drains: boolean) {
     supervisor.kill("SIGKILL");
     await supervisor.exited;
     await waitForRefused(url);
+  } finally {
+    supervisor.kill("SIGKILL");
+    await supervisor.exited;
+  }
+}
+
+async function testSingleProcessShutdown() {
+  const port = await reservePort();
+  const slow = `http://127.0.0.1:${port}/api/slow`;
+  const env = { ASTRO_BUN_WORKERS: "1" };
+
+  // As PID 1 in a container, a process without SIGTERM handlers ignores
+  // `docker stop`; the server must drain in-flight requests and exit 0.
+  let server = startWorkers("dist/server/entry.mjs", port, env);
+  try {
+    await waitFor(`http://127.0.0.1:${port}/api/worker`);
+    const response = await fetch(slow);
+    assert.equal(response.status, 200);
+    server.kill("SIGTERM");
+    assert.equal(await response.text(), "started finished");
+    assert.equal(await server.exited, 0);
+  } finally {
+    server.kill("SIGKILL");
+    await server.exited;
+  }
+
+  // shutdownTimeout bounds the drain.
+  server = startWorkers(
+    "dist/server/entry.mjs",
+    port,
+    { ...env, ASTRO_BUN_SHUTDOWN_TIMEOUT: "0.1" },
+    "pipe",
+  );
+  try {
+    await waitFor(`http://127.0.0.1:${port}/api/worker`);
+    const response = await fetch(slow);
+    server.kill("SIGTERM");
+    await response.text().catch(() => undefined);
+    assert.equal(await server.exited, 1);
+    assert.match(await readStderr(server), /did not stop within 0\.1s/);
+  } finally {
+    server.kill("SIGKILL");
+    await server.exited;
+  }
+}
+
+async function testSupervisorShutdownTimeout() {
+  const port = await reservePort();
+  const supervisor = startWorkers(
+    "dist/server/entry.mjs",
+    port,
+    { ASTRO_BUN_SHUTDOWN_TIMEOUT: "0.1" },
+    "pipe",
+  );
+  try {
+    await waitFor(`http://127.0.0.1:${port}/api/worker`);
+    const response = await fetch(`http://127.0.0.1:${port}/api/slow`);
+    supervisor.kill("SIGTERM");
+    await response.text().catch(() => undefined);
+    await supervisor.exited;
+    assert.match(
+      await readStderr(supervisor),
+      /Workers did not stop within 0\.1s/,
+    );
   } finally {
     supervisor.kill("SIGKILL");
     await supervisor.exited;
@@ -244,6 +331,52 @@ async function testWorkersRejectRemovedTls() {
     stderr,
     /restarting/,
     "the supervisor must reject removed TLS settings before starting workers",
+  );
+}
+
+async function testEntryTypes() {
+  // A custom server imports the built entry directly; TypeScript must type it
+  // from the declaration the adapter writes next to it, not infer `{}`.
+  await writeFile(
+    path.join(site, "entry-consumer.ts"),
+    `import { handler, options } from "./dist/server/entry.mjs";
+
+const port: number = options.port;
+// @ts-expect-error \`options.port\` is a number.
+const notPort: string = options.port;
+
+Bun.serve({
+  port,
+  reusePort: options.reusePort ?? false,
+  fetch: (request, server) =>
+    handler(request, {
+      clientAddress: server.requestIP(request)?.address,
+      serverPort: server.port,
+    }),
+});
+
+export { notPort };
+`,
+  );
+  await writeFile(
+    path.join(site, "tsconfig.entry.json"),
+    JSON.stringify({
+      compilerOptions: {
+        module: "NodeNext",
+        moduleResolution: "NodeNext",
+        noEmit: true,
+        skipLibCheck: true,
+        strict: true,
+        target: "ES2023",
+        lib: ["ES2023", "DOM", "DOM.Iterable"],
+        types: ["bun"],
+      },
+      files: ["entry-consumer.ts"],
+    }),
+  );
+  await run(
+    ["bunx", "tsc", "-p", path.join(site, "tsconfig.entry.json")],
+    root,
   );
 }
 
@@ -458,6 +591,8 @@ async function testStandalone() {
   await symlink("../server/entry.mjs", path.join(built, "client/leak.svg"));
   await testPreview();
   await testWorkers("dist/server/entry.mjs", true);
+  await testSingleProcessShutdown();
+  await testSupervisorShutdownTimeout();
   await testWorkersRejectRemovedTls();
 
   const relocated = path.join(site, "relocated-dist");
@@ -717,6 +852,7 @@ try {
 
   await run(["bunx", "astro", "build"], site, { ADAPTER_MODE: "middleware" });
   await testMiddleware();
+  await testEntryTypes();
   await testMiddlewareWorkers();
 
   await run(["bunx", "astro", "build"], site, {

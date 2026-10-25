@@ -49,6 +49,14 @@ describe("adapter options", () => {
     expect(normalizeUserOptions({ mode: "middleware", workers: 2 })).toEqual(
       expect.objectContaining({ workers: 2 }),
     );
+    for (const shutdownTimeout of [-1, Number.NaN, Infinity, "10"]) {
+      expect(() =>
+        normalizeUserOptions({ mode: "standalone", shutdownTimeout } as never),
+      ).toThrow("'shutdownTimeout' must be a non-negative number of seconds");
+    }
+    expect(
+      normalizeUserOptions({ mode: "middleware", shutdownTimeout: 0.5 }),
+    ).toEqual(expect.objectContaining({ shutdownTimeout: 0.5 }));
     for (const beforeStart of ["", 1, ["./ok.ts", ""]]) {
       expect(() =>
         normalizeUserOptions({ mode: "standalone", beforeStart } as never),
@@ -85,5 +93,6 @@ describe("adapter options", () => {
       "/y.ts",
     ]);
     expect(options.workers).toBe(1);
+    expect(options.shutdownTimeout).toBe(10);
   });
 });

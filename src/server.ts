@@ -1,4 +1,3 @@
-import { createApp } from "astro/app/entrypoint";
 import { AstroError } from "astro/errors";
 import { setGetEnv } from "astro/env/setup";
 import runBeforeStart from "virtual:igloczek-astro-bun-adapter:before-start";
@@ -17,6 +16,7 @@ import {
   isWatching,
   isWorker,
   relaunchCommand,
+  shutdownTimeout,
   stopWithSupervisor,
   workerCount,
 } from "./worker.js";
@@ -28,8 +28,9 @@ const beforeStart: () => Promise<void> = runBeforeStart;
 setGetEnv((key) => process.env[key]);
 
 const autostart = process.env.ASTRO_BUN_AUTOSTART !== "disabled";
+const stopTimeout = shutdownTimeout(config.shutdownTimeout);
 if (isWorker) {
-  stopWithSupervisor();
+  stopWithSupervisor(stopTimeout);
 } else if (autostart) {
   await beforeStart();
   const workers = workerCount(config.workers);
@@ -49,9 +50,18 @@ if (isWorker) {
     }
     // This process only supervises: the workers rerun its command, and this
     // import never resolves, so a custom server's code runs in the workers.
-    await supervise({ command: relaunchCommand(), workers });
+    await supervise({
+      command: relaunchCommand(),
+      workers,
+      shutdownTimeout: stopTimeout,
+    });
   }
 }
+
+// Astro's app entrypoint imports the app itself, including a custom
+// `src/fetch.ts`, so it loads only past this point: a supervisor never runs
+// app code.
+const { createApp } = await import("astro/app/entrypoint");
 
 // Supervised workers share one port, including custom servers that pass
 // `options.reusePort` to Bun.serve().
@@ -73,13 +83,29 @@ const startServer = () => (running ??= standalone(app, options, headersMap));
 
 if (options.mode === "standalone" && autostart) {
   const { stop } = startServer();
-  if (isWorker) {
-    // Drain in-flight requests; the supervisor kills workers that hang. A
-    // terminal's Ctrl+C reaches workers twice, so repeats must not kill.
-    const drain = () => void stop().then(() => process.exit(0));
-    process.on("SIGINT", drain);
-    process.on("SIGTERM", drain);
-  }
+  // Drain in-flight requests on SIGINT or SIGTERM. Without handlers, PID 1 in
+  // a container ignores `docker stop`. The supervisor kills workers that
+  // hang, and a terminal's Ctrl+C reaches workers twice, so only a process
+  // without a supervisor enforces the timeout and treats a repeat as a kill.
+  let stopping = false;
+  const drain = () => {
+    if (stopping) {
+      if (!isWorker) process.exit(1);
+      return;
+    }
+    stopping = true;
+    if (!isWorker) {
+      setTimeout(() => {
+        console.error(
+          `[${PACKAGE_NAME}] Server did not stop within ${stopTimeout}s; exiting.`,
+        );
+        process.exit(1);
+      }, stopTimeout * 1000).unref();
+    }
+    void stop().then(() => process.exit(0));
+  };
+  process.on("SIGINT", drain);
+  process.on("SIGTERM", drain);
 }
 
 export { beforeStart, handler, options, startServer };

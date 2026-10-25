@@ -30,6 +30,13 @@ export interface UserOptions {
    */
   beforeStart?: string | string[];
   /**
+   * Seconds a stopping server gets to finish in-flight requests after
+   * `SIGTERM` or `SIGINT` before it is killed. Applies to the standalone
+   * server and to `workers`. `ASTRO_BUN_SHUTDOWN_TIMEOUT` overrides it at
+   * runtime. Defaults to `10`.
+   */
+  shutdownTimeout?: number;
+  /**
    * Bun's HTTP idle timeout in seconds (`0` disables it, maximum `255`).
    * When omitted, Bun's 10-second default is preserved.
    */
@@ -53,6 +60,7 @@ export interface Options extends UserOptions {
   staticHeaders: boolean;
   trustedProxies: string[];
   workers: number;
+  shutdownTimeout: number;
   /** Resolved `beforeStart` specifiers; not exposed to the runtime. */
   beforeStart?: string[];
 }

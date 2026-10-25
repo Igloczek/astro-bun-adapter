@@ -7,6 +7,8 @@ import type { Options, UserOptions } from "./types.js";
 
 export const PACKAGE_NAME = "@igloczek/astro-bun-adapter";
 export const DEFAULT_REUSE_PORT = false;
+/** Seconds a stopping server gets to finish in-flight requests. */
+export const DEFAULT_SHUTDOWN_TIMEOUT = 10;
 
 function optionError(message: string): never {
   throw new AstroError(`[${PACKAGE_NAME}] ${message}`);
@@ -39,6 +41,10 @@ export function normalizeIdleTimeout(value: number | undefined) {
   return value;
 }
 
+export function isShutdownTimeout(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
 export function isWorkerCount(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
 }
@@ -46,6 +52,12 @@ export function isWorkerCount(value: unknown): value is number {
 function validateWorkers(value: unknown) {
   if (value !== undefined && !isWorkerCount(value)) {
     optionError("'workers' must be a positive integer.");
+  }
+}
+
+function validateShutdownTimeout(value: unknown) {
+  if (value !== undefined && !isShutdownTimeout(value)) {
+    optionError("'shutdownTimeout' must be a non-negative number of seconds.");
   }
 }
 
@@ -97,6 +109,7 @@ export function normalizeUserOptions(userOptions: UserOptions): UserOptions {
   validateOptionalBoolean("staticHeaders", userOptions.staticHeaders);
   validateOptionalBoolean("reusePort", userOptions.reusePort);
   validateWorkers(userOptions.workers);
+  validateShutdownTimeout(userOptions.shutdownTimeout);
   validateBeforeStart(userOptions.beforeStart);
 
   const bodySizeLimit = normalizeBodySizeLimit(userOptions.bodySizeLimit);
@@ -134,6 +147,7 @@ export function runtimeOptions(
     port: astroConfig.server.port,
     reusePort: userOptions.reusePort ?? DEFAULT_REUSE_PORT,
     server,
+    shutdownTimeout: userOptions.shutdownTimeout ?? DEFAULT_SHUTDOWN_TIMEOUT,
     staticHeaders: userOptions.staticHeaders ?? false,
     trustedProxies: userOptions.trustedProxies ?? [],
     workers: userOptions.workers ?? 1,
