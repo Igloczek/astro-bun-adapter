@@ -60,6 +60,6 @@ describe("native Bun server", () => {
       createServer(async () => new Response(), "127.0.0.1", 0, {
         reusePort: false,
       }),
-    ).toThrow("SERVER_CERT_PATH is set, but Native TLS was removed");
+    ).toThrow("SERVER_CERT_PATH is set, but Native TLS was removed in 1.0.0.");
   });
 });
