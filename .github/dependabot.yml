@@ -12,3 +12,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      # init and analyze must stay on the same CodeQL Action release.
+      codeql-action:
+        patterns:
+          - github/codeql-action*
