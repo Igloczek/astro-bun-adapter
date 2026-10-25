@@ -1,12 +1,10 @@
-import { AstroError } from "astro/errors";
-
 import {
   DEFAULT_SHUTDOWN_TIMEOUT,
   isShutdownTimeout,
   isWorkerCount,
   MAX_SHUTDOWN_TIMEOUT,
   PACKAGE_NAME,
-} from "./config.js";
+} from "./runtime-env.js";
 import { SUPERVISOR_ENV, WORKER_ENV } from "./supervisor.js";
 
 export const isWorker = process.env[WORKER_ENV] !== undefined;
@@ -17,7 +15,7 @@ export function workerCount(configured: number) {
   if (value === undefined || value === "") return configured;
   const count = Number(value);
   if (!isWorkerCount(count)) {
-    throw new AstroError(
+    throw new Error(
       `[${PACKAGE_NAME}] ASTRO_BUN_WORKERS must be a positive integer.`,
     );
   }
@@ -30,7 +28,7 @@ export function shutdownTimeout(configured: number) {
   if (value === undefined || value === "") return configured;
   const seconds = Number(value);
   if (!isShutdownTimeout(seconds)) {
-    throw new AstroError(
+    throw new Error(
       `[${PACKAGE_NAME}] ASTRO_BUN_SHUTDOWN_TIMEOUT must be a number of seconds from 0 through ${MAX_SHUTDOWN_TIMEOUT}.`,
     );
   }

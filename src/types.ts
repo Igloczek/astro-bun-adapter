@@ -32,7 +32,10 @@ export interface UserOptions {
   /**
    * Seconds a stopping server gets after `SIGTERM` or `SIGINT` to finish
    * in-flight requests and the app's own signal handlers before it is
-   * killed. Fractions are allowed; `0` kills it at once. Applies when the
+   * killed. Fractions are allowed; `0` kills it at once. Without other
+   * listeners for the signal, the process exits as soon as requests finish;
+   * with any, it waits to exit by itself, which open connections nothing
+   * closes delay until the timeout. Applies when the
    * adapter starts the server: the standalone server and every `workers`
    * setup. A custom server, or `startServer()`, handles its own signals.
    * `ASTRO_BUN_SHUTDOWN_TIMEOUT` overrides it at runtime. Defaults to `60`.

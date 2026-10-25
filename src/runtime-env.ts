@@ -1,7 +1,26 @@
-// Environment checks the supervisor runs before any worker starts. This module
-// must not import Astro's app runtime, which would load the app itself.
-import { PACKAGE_NAME, TLS_REMOVED_MESSAGE } from "./config.js";
+// Values and environment checks the worker supervisor needs. The supervisor
+// must not load the app, and a bundler can merge any Astro module with app
+// code (e.g. a vendor chunk), so this module imports nothing from Astro.
 import type { Options } from "./types.js";
+
+export const PACKAGE_NAME = "@igloczek/astro-bun-adapter";
+export const DEFAULT_REUSE_PORT = false;
+/** Seconds a stopping server gets to finish in-flight requests. */
+export const DEFAULT_SHUTDOWN_TIMEOUT = 60;
+/** The longest delay a timer supports (2^31 - 1 ms), in whole seconds. */
+export const MAX_SHUTDOWN_TIMEOUT = Math.floor((2 ** 31 - 1) / 1000);
+
+export function isShutdownTimeout(value: unknown): value is number {
+  return (
+    typeof value === "number" && value >= 0 && value <= MAX_SHUTDOWN_TIMEOUT
+  );
+}
+
+export function isWorkerCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
+}
+export const TLS_REMOVED_MESSAGE =
+  "Native TLS was removed in 1.0.0. Terminate TLS at a reverse proxy (Caddy, Traefik, nginx, a load balancer) and keep `X-Forwarded-Proto` for the public scheme.";
 
 export const hostOptions = (host: string | boolean) => {
   if (typeof host === "boolean") return host ? "0.0.0.0" : "localhost";

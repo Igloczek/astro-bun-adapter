@@ -1,13 +1,15 @@
-// Only modules that never load the app may be imported statically here: this
-// entry decides first whether the process is a worker supervisor, and a
-// supervisor must not run app code. The app loads from `./app-server.js`.
-import { AstroError } from "astro/errors";
-import { setGetEnv } from "astro/env/setup";
+// Nothing from Astro may be imported statically here: this entry decides
+// first whether the process is a worker supervisor, a supervisor must not run
+// app code, and a bundler can merge any Astro module with the app's (e.g. in
+// a vendor chunk). Astro and the app load after that decision.
 import runBeforeStart from "virtual:igloczek-astro-bun-adapter:before-start";
 import * as config from "virtual:igloczek-astro-bun-adapter:config";
 
-import { PACKAGE_NAME } from "./config.js";
-import { rejectRemovedTlsEnv, runtimePort } from "./runtime-env.js";
+import {
+  PACKAGE_NAME,
+  rejectRemovedTlsEnv,
+  runtimePort,
+} from "./runtime-env.js";
 import { supervise } from "./supervisor.js";
 import {
   isWatching,
@@ -21,8 +23,6 @@ import type { Options } from "./types.js";
 
 // Explicit types keep the virtual modules out of the published declarations.
 const beforeStart: () => Promise<void> = runBeforeStart;
-
-setGetEnv((key) => process.env[key]);
 
 const autostart = process.env.ASTRO_BUN_AUTOSTART !== "disabled";
 const stopTimeout = shutdownTimeout(config.shutdownTimeout);
@@ -40,7 +40,7 @@ if (isWorker) {
       // Fail here once, instead of in every worker until the crash limit.
       rejectRemovedTlsEnv();
       if (runtimePort(config) === 0) {
-        throw new AstroError(
+        throw new Error(
           `[${PACKAGE_NAME}] 'workers' requires a fixed PORT; port 0 gives every worker a different port.`,
         );
       }
@@ -61,6 +61,8 @@ const options: Omit<Options, "beforeStart"> = isWorker
   ? { ...config, reusePort: true }
   : { ...config };
 
+const { setGetEnv } = await import("astro/env/setup");
+setGetEnv((key) => process.env[key]);
 const { createAppServer } = await import("./app-server.js");
 const { handler, startServer } = await createAppServer(options);
 
@@ -76,6 +78,9 @@ if (options.mode === "standalone" && autostart) {
       if (!isWorker) process.exit(1);
       return;
     }
+    // Decided before any app listener runs: `once` listeners remove
+    // themselves, and the adapter's handler runs first (prepended).
+    const appHandlesSignal = process.listenerCount(signal) > 1;
     stopping = true;
     if (!isWorker) {
       setTimeout(() => {
@@ -89,12 +94,11 @@ if (options.mode === "standalone" && autostart) {
       // An app that handles the signal too owns the rest of its cleanup, so
       // the process exits once that finishes, within the timeout. Otherwise
       // nothing is left to wait for, open connections included.
-      if (process.listenerCount(signal) > 1) process.exitCode = 0;
-      else process.exit(0);
+      if (!appHandlesSignal) process.exit(process.exitCode ?? 0);
     });
   };
-  process.on("SIGINT", drain);
-  process.on("SIGTERM", drain);
+  process.prependListener("SIGINT", drain);
+  process.prependListener("SIGTERM", drain);
 }
 
 export { beforeStart, handler, options, startServer };

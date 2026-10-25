@@ -3,12 +3,26 @@ import { fileURLToPath } from "node:url";
 
 import { AstroError } from "astro/errors";
 
+import {
+  DEFAULT_REUSE_PORT,
+  DEFAULT_SHUTDOWN_TIMEOUT,
+  isShutdownTimeout,
+  isWorkerCount,
+  MAX_SHUTDOWN_TIMEOUT,
+  PACKAGE_NAME,
+  TLS_REMOVED_MESSAGE,
+} from "./runtime-env.js";
 import type { Options, UserOptions } from "./types.js";
 
-export const PACKAGE_NAME = "@igloczek/astro-bun-adapter";
-export const DEFAULT_REUSE_PORT = false;
-/** Seconds a stopping server gets to finish in-flight requests. */
-export const DEFAULT_SHUTDOWN_TIMEOUT = 60;
+export {
+  DEFAULT_REUSE_PORT,
+  DEFAULT_SHUTDOWN_TIMEOUT,
+  isShutdownTimeout,
+  isWorkerCount,
+  MAX_SHUTDOWN_TIMEOUT,
+  PACKAGE_NAME,
+  TLS_REMOVED_MESSAGE,
+};
 
 function optionError(message: string): never {
   throw new AstroError(`[${PACKAGE_NAME}] ${message}`);
@@ -39,19 +53,6 @@ export function normalizeIdleTimeout(value: number | undefined) {
     optionError("'idleTimeout' must be an integer from 0 through 255.");
   }
   return value;
-}
-
-/** The longest delay a timer supports (2^31 - 1 ms), in whole seconds. */
-export const MAX_SHUTDOWN_TIMEOUT = Math.floor((2 ** 31 - 1) / 1000);
-
-export function isShutdownTimeout(value: unknown): value is number {
-  return (
-    typeof value === "number" && value >= 0 && value <= MAX_SHUTDOWN_TIMEOUT
-  );
-}
-
-export function isWorkerCount(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
 }
 
 function validateWorkers(value: unknown) {
@@ -97,9 +98,6 @@ function normalizeTrustedProxies(value: string[] | undefined) {
   }
   return [...new Set(value)];
 }
-
-export const TLS_REMOVED_MESSAGE =
-  "Native TLS was removed in 1.0.0. Terminate TLS at a reverse proxy (Caddy, Traefik, nginx, a load balancer) and keep `X-Forwarded-Proto` for the public scheme.";
 
 export function normalizeUserOptions(userOptions: UserOptions): UserOptions {
   if (!userOptions || typeof userOptions !== "object") {

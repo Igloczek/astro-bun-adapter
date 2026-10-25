@@ -3,7 +3,7 @@ import {
   isShutdownTimeout,
   MAX_SHUTDOWN_TIMEOUT,
   PACKAGE_NAME,
-} from "./config.js";
+} from "./runtime-env.js";
 
 export interface SuperviseOptions {
   /** Command that starts one worker. */

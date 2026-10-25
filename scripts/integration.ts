@@ -203,6 +203,34 @@ async function waitForRefused(url: string) {
   throw new Error(`${url} is still served`);
 }
 
+/** Workers evaluate the app's modules; the supervisor, serving nothing, must not. */
+async function assertAppLoadsOnlyInWorkers(supervisorPid: number) {
+  const loads = (await readFile(appLog, "utf8")).trim().split("\n");
+  for (const module of ["fetch", "renderer"]) {
+    const pids = loads
+      .filter((line) => line.startsWith(`${module} `))
+      .map((line) => line.split(" ")[1]);
+    assert.ok(pids.length > 0, `no worker evaluated the app's ${module}`);
+    assert.ok(
+      !pids.includes(String(supervisorPid)),
+      `the supervisor must not evaluate the app's ${module}`,
+    );
+  }
+}
+
+async function testVendorChunkSupervisor() {
+  const port = await reservePort();
+  await writeFile(appLog, "");
+  const supervisor = startWorkers("dist/server/entry.mjs", port);
+  try {
+    await waitFor(`http://127.0.0.1:${port}/api/worker`);
+    await assertAppLoadsOnlyInWorkers(supervisor.pid);
+  } finally {
+    supervisor.kill("SIGKILL");
+    await supervisor.exited;
+  }
+}
+
 async function testWorkers(script: string, drains: boolean) {
   const port = await reservePort();
   const url = `http://127.0.0.1:${port}/api/worker`;
@@ -229,19 +257,7 @@ async function testWorkers(script: string, drains: boolean) {
       await Bun.sleep(25);
     }
     assert.deepEqual([...seen].sort(), expected, "workers did not all serve");
-    // Workers evaluate the app's fetch handler and renderers; the supervisor,
-    // which serves nothing, must not.
-    const loads = (await readFile(appLog, "utf8")).trim().split("\n");
-    for (const module of ["fetch", "renderer"]) {
-      const pids = loads
-        .filter((line) => line.startsWith(`${module} `))
-        .map((line) => line.split(" ")[1]);
-      assert.ok(pids.length > 0, `no worker evaluated the app's ${module}`);
-      assert.ok(
-        !pids.includes(String(supervisor.pid)),
-        `the supervisor must not evaluate the app's ${module}`,
-      );
-    }
+    await assertAppLoadsOnlyInWorkers(supervisor.pid);
 
     if (drains) {
       // Headers arrive with the first chunk, once the handler is running.
@@ -333,21 +349,30 @@ async function testSupervisorShutdownTimeout() {
 async function testAppCleanupOnShutdown() {
   // The app's own SIGTERM handler must finish after HTTP requests drain, in
   // a single process and in supervised workers.
-  for (const workers of ["1", "2"]) {
+  const cases = [
+    { workers: "1", env: {}, code: 0 },
+    { workers: "2", env: {}, code: 0 },
+    { workers: "1", env: { FIXTURE_CLEANUP_ONCE: "1" }, code: 0 },
+    { workers: "2", env: { FIXTURE_CLEANUP_ONCE: "1" }, code: 0 },
+    { workers: "1", env: { FIXTURE_CLEANUP_EXIT_CODE: "23" }, code: 23 },
+  ];
+  for (const { workers, env, code } of cases) {
+    const label = `${workers} worker(s), ${JSON.stringify(env)}`;
     const port = await reservePort();
     await writeFile(cleanupLog, "");
     const server = startWorkers("dist/server/entry.mjs", port, {
       ASTRO_BUN_WORKERS: workers,
       FIXTURE_CLEANUP_LOG: cleanupLog,
+      ...env,
     });
     try {
       await waitFor(`http://127.0.0.1:${port}/api/worker`);
       server.kill("SIGTERM");
-      assert.equal(await exitCode(server), 0);
+      assert.equal(await exitCode(server), code, label);
       assert.match(
         await readFile(cleanupLog, "utf8"),
         /cleaned up/,
-        `the app's SIGTERM cleanup must finish with ${workers} worker(s)`,
+        `the app's SIGTERM cleanup must finish: ${label}`,
       );
     } finally {
       server.kill("SIGKILL");
@@ -921,6 +946,12 @@ try {
     FIXTURE_IMAGE_ROUTE: "/images/index.ts",
   });
   await testResolvedImageRoute();
+
+  await run(["bunx", "astro", "build"], site, {
+    ADAPTER_MODE: "standalone",
+    FIXTURE_VENDOR_CHUNK: "1",
+  });
+  await testVendorChunkSupervisor();
 
   console.log(`Integration passed with Astro ${astroVersion}`);
 } finally {
