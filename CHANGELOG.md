@@ -4,6 +4,7 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## Unreleased
 
+- **Breaking:** require Bun 1.4.4 or newer (`engines.bun`). Earlier releases have known security vulnerabilities in the bundled brotli decoder (GHSA-663w-cv8g-jj2p) and root certificate store (GHSA-26q8-h657-pf84), both reachable through outbound `fetch`, for example remote images in `/_image`. CI now tests Bun 1.4.4 as the oldest supported release.
 - **Breaking:** require Astro 7.2.8 or newer (`peerDependencies.astro: ^7.2.8`). Earlier Astro 7 releases have known security vulnerabilities, including a critical RCE in AVIF image optimization (fixed in 7.2.8) and a base-path authorization bypass (fixed in 7.2.4). CI now tests 7.2.8 as the oldest supported release.
 - **Breaking:** remove native TLS (the `tls` option and `SERVER_CERT_PATH`, `SERVER_KEY_PATH`, `SERVER_CA_PATH`, `SERVER_KEY_PASSPHRASE`). Terminate TLS at a reverse proxy and keep `X-Forwarded-Proto` for the public scheme. Passing `tls` fails the build, and the server refuses to start while those variables are set, so a deployment never falls back to plaintext silently.
 - **Breaking (security):** without `security.allowedDomains`, the `Host` header no longer controls `request.url`; every request uses `localhost:<port>`, matching `@astrojs/node` 11.1.7. List your public domains in `security.allowedDomains` to keep correct `Astro.url` values and `security.checkOrigin` behind a domain (for example Coolify); see "Migrating from 0.2" in the README.
