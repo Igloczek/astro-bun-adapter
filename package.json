@@ -30,6 +30,10 @@
       "types": "./dist/preview.d.ts",
       "default": "./dist/preview.js"
     },
+    "./supervisor.js": {
+      "types": "./dist/supervisor.d.ts",
+      "default": "./dist/supervisor.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

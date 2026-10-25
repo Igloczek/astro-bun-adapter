@@ -127,6 +127,35 @@ async function testPreview() {
   assert.ok([0, 143].includes(await process.exited));
 }
 
+async function testWorkers() {
+  const port = await reservePort();
+  const supervisor = Bun.spawn(["bun", "dist/server/entry.mjs"], {
+    cwd: site,
+    env: {
+      ...Bun.env,
+      HOST: "127.0.0.1",
+      PORT: String(port),
+      ASTRO_BUN_LOGGING: "disabled",
+    },
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  const url = `http://127.0.0.1:${port}/api/worker`;
+  await waitFor(url);
+  // Bun only balances reusePort connections on Linux.
+  const expected = process.platform === "linux" ? ["0", "1"] : ["0"];
+  const seen = new Set<string>();
+  for (let attempt = 0; attempt < 200 && seen.size < expected.length;) {
+    const response = await fetch(url, { keepalive: false });
+    seen.add(await response.text());
+    attempt += 1;
+    await Bun.sleep(25);
+  }
+  assert.deepEqual([...seen].sort(), expected, "workers did not all serve");
+  supervisor.kill("SIGTERM");
+  assert.equal(await supervisor.exited, 0);
+}
+
 async function hashedPixelHref(clientDir: string) {
   const files = await readdir(path.join(clientDir, "_astro"));
   const pixel = files.find(
@@ -305,6 +334,7 @@ async function testStandalone() {
   await symlink("../server/entry.mjs", path.join(built, "client/leak.mjs"));
   await symlink("../server/entry.mjs", path.join(built, "client/leak.svg"));
   await testPreview();
+  await testWorkers();
 
   const relocated = path.join(site, "relocated-dist");
   await rename(built, relocated);

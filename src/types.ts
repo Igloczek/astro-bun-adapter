@@ -29,6 +29,11 @@ export interface UserOptions {
   /** Allows multiple Bun processes to accept connections on the same port. */
   reusePort?: boolean;
   /**
+   * Standalone server processes to run on one port. Above `1`, the entry
+   * supervises that many workers with `reusePort` (Linux only).
+   */
+  workers?: number;
+  /**
    * Bun's HTTP idle timeout in seconds (`0` disables it, maximum `255`).
    * When omitted, Bun's 10-second default is preserved.
    */
@@ -53,6 +58,7 @@ export interface Options extends UserOptions {
   server: string;
   staticHeaders: boolean;
   trustedProxies: string[];
+  workers: number;
 }
 
 export interface BunRequestContext {

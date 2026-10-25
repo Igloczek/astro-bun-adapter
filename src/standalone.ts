@@ -16,8 +16,9 @@ export const hostOptions = (host: string | boolean) => {
   return host;
 };
 
-function parsePort(value: string | undefined, fallback: number) {
-  const port = value === undefined ? fallback : Number(value);
+export function runtimePort(options: Pick<Options, "port">) {
+  const value = process.env.PORT;
+  const port = value === undefined ? (options.port ?? 8080) : Number(value);
   if (!Number.isInteger(port) || port < 0 || port > 65_535) {
     throw new Error(
       `[${PACKAGE_NAME}] PORT must be an integer from 0 through 65535.`,
@@ -121,7 +122,7 @@ export default function standalone(
   options: Options,
   headersMap: BunAppHeadersJson | undefined,
 ) {
-  const port = parsePort(process.env.PORT, options.port ?? 8080);
+  const port = runtimePort(options);
   const host = process.env.HOST ?? hostOptions(options.host);
   const server = createServer(
     createStandaloneHandler(app, { ...options, host, port }, headersMap),

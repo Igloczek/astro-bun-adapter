@@ -40,5 +40,16 @@ describe("adapter options", () => {
         tls: { certPath: "", keyPath: "key.pem" },
       }),
     ).toThrow("tls");
+    for (const workers of [0, 1.5, "2"]) {
+      expect(() =>
+        normalizeUserOptions({ mode: "standalone", workers } as never),
+      ).toThrow("'workers' must be a positive integer");
+    }
+    expect(() =>
+      normalizeUserOptions({ mode: "middleware", workers: 2 }),
+    ).toThrow("supervise()");
+    expect(normalizeUserOptions({ mode: "middleware", workers: 1 })).toEqual(
+      expect.objectContaining({ workers: 1 }),
+    );
   });
 });

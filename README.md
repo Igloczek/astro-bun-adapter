@@ -71,6 +71,18 @@ bunx --bun astro preview
 
 `HOST` and `PORT` override Astro's configured host and port at runtime.
 
+### Multiple processes
+
+Set `workers` to run several Bun processes on one port:
+
+```ts
+adapter: bun({ mode: "standalone", workers: 2 });
+```
+
+`bun ./dist/server/entry.mjs` then supervises that many workers sharing the port with `reusePort`. Bun only balances those connections on Linux, so other platforms run a single worker with a warning. Each worker gets its index, from `0`, in `ASTRO_BUN_WORKER`. A worker that exits is restarted; if workers exit more than three times each within a minute, the supervisor stops them and exits with code `1`, so your process manager can take over. `SIGINT` and `SIGTERM` are forwarded to every worker, and a second signal kills them. `PORT` must not be `0`.
+
+Workers don't share memory, so in-memory state such as `memoryCache()` is per worker. The default filesystem sessions are shared.
+
 ## Middleware
 
 Middleware mode exports a web-standard `(Request, context) => Promise<Response>` handler. Your server is responsible for static files.
@@ -99,6 +111,22 @@ Bun.serve({
 
 The entry module also exports normalized `options` and an idempotent `startServer()` function. Set `ASTRO_BUN_AUTOSTART=disabled` before importing a standalone entry when you need to call `startServer()` yourself.
 
+To run a custom server as several processes, supervise it from a separate script. The workers behave as described in [Multiple processes](#multiple-processes). Inside a worker, the entry's exported `options.reusePort` is `true`, so pass it to `Bun.serve()`:
+
+```ts
+// supervisor.ts, started with `bun ./supervisor.ts`
+import { supervise } from "@igloczek/astro-bun-adapter/supervisor.js";
+
+await supervise({ command: ["bun", "./server.ts"], workers: 2 });
+```
+
+```ts
+// server.ts
+import { handler, options } from "./dist/server/entry.mjs";
+
+Bun.serve({ port: 3000, reusePort: options.reusePort, fetch: handler });
+```
+
 ## Options
 
 | Option                         | Default           | Purpose                                                 |
@@ -107,6 +135,7 @@ The entry module also exports normalized `options` and an idempotent `startServe
 | `staticHeaders`                | `false`           | Serve Astro-generated CSP headers for prerendered files |
 | `bodySizeLimit`                | Bun default       | Maximum body bytes; `0`/`Infinity` disables the limit   |
 | `reusePort`                    | `false`           | Allow multiple Bun processes on one port                |
+| `workers`                      | `1`               | Standalone processes to run on one port (Linux)         |
 | `idleTimeout`                  | Bun default (10s) | `0` disables it; maximum is 255 seconds                 |
 | `trustedProxies`               | `[]`              | Exact proxy IPs allowed to supply `X-Forwarded-For`     |
 | `tls`                          | none              | Certificate/key paths for native TLS                    |
@@ -208,7 +237,7 @@ Unsupported multi-range requests are safely served as complete `200` responses.
 | Trusted proxies (client IP)   |    ✅     |                         ✅                         |                           ❌                           |                                       ❌                                       |
 | Body limit / idle timeout     |    ✅     |                         ✅                         |                           ❌                           |                                       ❌                                       |
 | `reusePort` (Linux)           |    ✅     |                         ✅                         |                           ❌                           |                                       ❌                                       |
-| Multi-process workers         | ⚠️ manual |                         ✅                         |                           ❌                           |                                       ❌                                       |
+| Multi-process workers         |    ✅     |                         ✅                         |                           ❌                           |                                       ❌                                       |
 | WebSockets                    |    ❌     |                         ✅                         |                           ❌                           |                                       ❌                                       |
 | Zero dependencies             |    ✅     |                         ✅                         |                           ❌                           |                                       ✅                                       |
 | Known security issues         |     0     |                         0                          |                           1                            |                                       2                                        |

@@ -22,6 +22,8 @@ export default defineConfig({
     bodySizeLimit: 1024 * 1024,
     staticHeaders: true,
     trustedProxies: ["127.0.0.1", "::1"],
+    // Only used when the entry runs directly; the runner disables autostart.
+    ...(mode === "standalone" ? { workers: 2 } : {}),
   }),
   build: { format: "directory" },
   security: {

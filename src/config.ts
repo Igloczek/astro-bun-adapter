@@ -38,6 +38,18 @@ export function normalizeIdleTimeout(value: number | undefined) {
   return value;
 }
 
+function validateWorkers(value: unknown, mode: UserOptions["mode"]) {
+  if (value === undefined) return;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {
+    optionError("'workers' must be a positive integer.");
+  }
+  if (value > 1 && mode !== "standalone") {
+    optionError(
+      `'workers' requires standalone mode. Run a custom server with supervise() from ${PACKAGE_NAME}/supervisor.js.`,
+    );
+  }
+}
+
 function normalizeTrustedProxies(value: string[] | undefined) {
   if (value === undefined) return [];
   if (!Array.isArray(value) || value.some((address) => isIP(address) === 0)) {
@@ -80,6 +92,7 @@ export function normalizeUserOptions(userOptions: UserOptions): UserOptions {
   );
   validateOptionalBoolean("staticHeaders", userOptions.staticHeaders);
   validateOptionalBoolean("reusePort", userOptions.reusePort);
+  validateWorkers(userOptions.workers, userOptions.mode);
 
   const bodySizeLimit = normalizeBodySizeLimit(userOptions.bodySizeLimit);
   const idleTimeout = normalizeIdleTimeout(userOptions.idleTimeout);
@@ -114,5 +127,6 @@ export function runtimeOptions(
     server,
     staticHeaders: userOptions.staticHeaders ?? false,
     trustedProxies: userOptions.trustedProxies ?? [],
+    workers: userOptions.workers ?? 1,
   };
 }
