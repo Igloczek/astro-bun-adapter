@@ -55,6 +55,49 @@ describe("native Bun server", () => {
     await stopping;
   });
 
+  test.skipIf(!Bun.semver.satisfies(Bun.version, ">=1.4.1"))(
+    "serves HTTP/2 and HTTP/1.1 on one port when http2 is enabled",
+    async () => {
+      const server = createServer(
+        async () => new Response("ok"),
+        "127.0.0.1",
+        0,
+        { http2: true, reusePort: false },
+      );
+      servers.push(server);
+
+      const httpVersion = async (...args: string[]) => {
+        const curl = Bun.spawn([
+          "curl",
+          "-s",
+          "-m",
+          "5",
+          "-o",
+          "/dev/null",
+          "-w",
+          "%{http_version}",
+          ...args,
+          `http://127.0.0.1:${server.port}/`,
+        ]);
+        return new Response(curl.stdout).text();
+      };
+      expect(await httpVersion("--http2-prior-knowledge")).toBe("2");
+      expect(await httpVersion("--http1.1")).toBe("1.1");
+    },
+  );
+
+  test.skipIf(Bun.semver.satisfies(Bun.version, ">=1.4.1"))(
+    "refuses http2 on Bun releases without HTTP/2 support",
+    () => {
+      expect(() =>
+        createServer(async () => new Response("ok"), "127.0.0.1", 0, {
+          http2: true,
+          reusePort: false,
+        }),
+      ).toThrow("http2");
+    },
+  );
+
   test("rejects partial runtime TLS configuration before listening", () => {
     process.env.SERVER_CERT_PATH = "cert.pem";
     expect(() =>

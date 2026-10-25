@@ -32,6 +32,9 @@ describe("adapter options", () => {
       "mode",
     );
     expect(() =>
+      normalizeUserOptions({ mode: "standalone", http2: "yes" as never }),
+    ).toThrow("http2");
+    expect(() =>
       normalizeUserOptions({ mode: "standalone", trustedProxies: ["host"] }),
     ).toThrow("trustedProxies");
     expect(() =>

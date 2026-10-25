@@ -11,7 +11,7 @@ const createPreviewServer: CreatePreviewServer = async (preview) => {
   let handler: RequestHandler;
   let options: Pick<
     Options,
-    "bodySizeLimit" | "idleTimeout" | "reusePort" | "tls"
+    "bodySizeLimit" | "http2" | "idleTimeout" | "reusePort" | "tls"
   > = { reusePort: false };
   const previousAutostart = process.env.ASTRO_BUN_AUTOSTART;
 

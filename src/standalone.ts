@@ -48,6 +48,19 @@ function runtimeTls(config: TlsOptions | undefined) {
   };
 }
 
+const HTTP2_MIN_BUN_VERSION = "1.4.1";
+
+function runtimeHttp2(enabled: boolean | undefined) {
+  if (!enabled) return {};
+  if (!Bun.semver.satisfies(Bun.version, `>=${HTTP2_MIN_BUN_VERSION}`)) {
+    throw new Error(
+      `[${PACKAGE_NAME}] 'http2' requires Bun ${HTTP2_MIN_BUN_VERSION} or newer (running ${Bun.version}).`,
+    );
+  }
+  // Not in @types/bun 1.3.x, which matches the minimum supported runtime.
+  return { http2: true };
+}
+
 export function createStandaloneHandler(
   app: BaseApp,
   options: Options,
@@ -70,13 +83,17 @@ export function createServer(
   listener: RequestHandler,
   host: string,
   port: number,
-  options: Pick<Options, "bodySizeLimit" | "idleTimeout" | "reusePort" | "tls">,
+  options: Pick<
+    Options,
+    "bodySizeLimit" | "http2" | "idleTimeout" | "reusePort" | "tls"
+  >,
 ) {
   let resolveClosed: (() => void) | undefined;
   const closed = new Promise<void>((resolve) => {
     resolveClosed = resolve;
   });
   const tls = runtimeTls(options.tls);
+  const http2 = runtimeHttp2(options.http2);
   const server = Bun.serve({
     hostname: host,
     port,
@@ -88,6 +105,7 @@ export function createServer(
       ? {}
       : { maxRequestBodySize: options.bodySizeLimit }),
     ...(tls ? { tls } : {}),
+    ...http2,
     fetch(request, bunServer) {
       const clientAddress = bunServer.requestIP(request)?.address;
       return listener(

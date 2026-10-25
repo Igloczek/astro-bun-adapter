@@ -26,6 +26,11 @@ export interface UserOptions {
    * When omitted, Bun's default is preserved.
    */
   bodySizeLimit?: number;
+  /**
+   * Serve HTTP/2 alongside HTTP/1.1 on the same port (ALPN over TLS,
+   * prior-knowledge cleartext otherwise). Requires Bun 1.4.1 or newer.
+   */
+  http2?: boolean;
   /** Allows multiple Bun processes to accept connections on the same port. */
   reusePort?: boolean;
   /**

@@ -80,6 +80,7 @@ export function normalizeUserOptions(userOptions: UserOptions): UserOptions {
   );
   validateOptionalBoolean("staticHeaders", userOptions.staticHeaders);
   validateOptionalBoolean("reusePort", userOptions.reusePort);
+  validateOptionalBoolean("http2", userOptions.http2);
 
   const bodySizeLimit = normalizeBodySizeLimit(userOptions.bodySizeLimit);
   const idleTimeout = normalizeIdleTimeout(userOptions.idleTimeout);
