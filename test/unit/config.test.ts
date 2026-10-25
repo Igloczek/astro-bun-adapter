@@ -37,8 +37,8 @@ describe("adapter options", () => {
     expect(() =>
       normalizeUserOptions({
         mode: "standalone",
-        tls: { certPath: "", keyPath: "key.pem" },
-      }),
-    ).toThrow("tls");
+        tls: { certPath: "cert.pem", keyPath: "key.pem" },
+      } as never),
+    ).toThrow("reverse proxy");
   });
 });
