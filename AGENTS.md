@@ -29,7 +29,7 @@ When Astro ships a new server feature, supporting it is in scope.
 
 **Constraints:**
 
-- Support every Astro 7 release from 7.0.0, and Bun 1.3.14 or newer. CI tests the oldest and newest.
+- Support every Astro 7 release from 7.2.8, and Bun 1.3.14 or newer. CI tests the oldest and newest. Raise the Astro floor when an older release has a known security vulnerability: nobody should run it.
 - Zero runtime dependencies.
 - Stay close to the upstream `@astrojs/node` integration contract, so Astro fixes carry over.
 

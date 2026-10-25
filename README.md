@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@igloczek/astro-bun-adapter"><img src="https://img.shields.io/npm/v/@igloczek/astro-bun-adapter?color=cb3837&logo=npm" alt="npm version"></a>
-  <a href="https://astro.build"><img src="https://img.shields.io/badge/Astro-7-BC52EE?logo=astro&logoColor=white" alt="Astro 7"></a>
+  <a href="https://astro.build"><img src="https://img.shields.io/badge/Astro-7.2.8%2B-BC52EE?logo=astro&logoColor=white" alt="Astro 7.2.8 or newer"></a>
   <a href="https://bun.sh"><img src="https://img.shields.io/badge/Bun-1.3.14%2B-14151A?logo=bun&logoColor=white" alt="Bun 1.3.14 or newer"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
 </p>
@@ -29,13 +29,13 @@
 - **The full Astro server feature set.** Astro Image, sessions (filesystem storage by default), actions, server islands, `astro:env` secrets, route caching, CSP and custom error pages.
 - **Hardened asset serving.** Traversal and symlink containment, dotfile denial, ETags, byte ranges and immutable asset caching.
 - **Proxy-aware.** Trusted `X-Forwarded-For` handling for real client IPs, and HTTPS restored behind TLS-terminating proxies.
-- **Tested on every change.** CI covers the oldest and newest Astro 7 releases, and releases are published with npm provenance.
+- **Tested on every change.** CI covers the oldest supported and newest Astro 7 releases, and releases are published with npm provenance.
 
 ## Requirements
 
-- Astro 7
+- Astro 7.2.8 or newer. Earlier Astro 7 releases have known security vulnerabilities, including a critical RCE in AVIF image optimization (fixed in 7.2.8).
 - Bun 1.3.14 or newer
-- Node.js for Astro's build tooling, at the version your Astro release requires (22.12 for Astro 7.0, 22.23.4 since Astro 7.4.2)
+- Node.js for Astro's build tooling, at the version your Astro release requires (22.23.4 since Astro 7.4.2)
 
 ## Install
 
@@ -172,7 +172,7 @@ Unsupported multi-range requests are safely served as complete `200` responses.
 |                               | **This**  | [Nauverse](https://github.com/TheNaubit/astro-bun) | [Wyatt](https://github.com/wyattjoh/astro-bun-adapter) | [Scaliir](https://github.com/ScaliirDigital/root/tree/main/packages/astro-bun) |
 | ----------------------------- | :-------: | :------------------------------------------------: | :----------------------------------------------------: | :----------------------------------------------------------------------------: |
 | Best for                      | SSR apps  |                 Static + some SSR                  |                       SSR + ISR                        |                                 SSR + caching                                  |
-| Declared Astro                |  `^7.0`   |                       `^7.4`                       |                         `^6.3`                         |                                     `^6.3`                                     |
+| Declared Astro                | `^7.2.8`  |                       `^7.4`                       |                         `^6.3`                         |                                     `^6.3`                                     |
 | Minimum Bun                   |  1.3.14   |                       1.4.3                        |                          1.0                           |                                      1.3                                       |
 | Latest version                |   0.2.1   |                       0.1.4                        |                         2.1.1                          |                                     0.1.2                                      |
 | **Astro features**            |           |                                                    |                                                        |                                                                                |
