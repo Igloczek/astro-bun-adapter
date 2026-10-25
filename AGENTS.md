@@ -37,7 +37,7 @@ When Astro ships a new server feature, supporting it is in scope.
 
 These belong to the reverse proxy or CDN, only help static sites, or have nothing to do with Astro. Don't add them, and don't suggest them as gaps to close:
 
-- TLS termination. The `tls` option was removed in 0.3.0; don't reintroduce it.
+- TLS termination. The `tls` option was removed in 1.0.0; don't reintroduce it.
 - WebSockets, or any other `Bun.serve()` option exposed just because Bun has it. Astro has no WebSocket API, so there is nothing to integrate; apps that need sockets own their `Bun.serve()` in middleware mode.
 - HTTP/2 and HTTP/3
 - Brotli/gzip compression, including pre-compressed assets
