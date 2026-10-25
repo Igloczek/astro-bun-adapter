@@ -123,14 +123,19 @@ async function testPreview() {
   );
   const response = await waitFor(`http://127.0.0.1:${port}/`);
   assert.equal(response.headers.get("x-adapter-preview"), "active");
+  const worker = (await (
+    await fetch(`http://127.0.0.1:${port}/api/worker`)
+  ).json()) as { worker: string | null; beforeStart: string | null };
+  assert.equal(worker.worker, null, "preview must not supervise workers");
+  assert.ok(worker.beforeStart, "preview must run beforeStart");
   process.kill("SIGTERM");
   assert.ok([0, 143].includes(await process.exited));
 }
 
-async function testWorkers() {
-  const port = await reservePort();
-  const supervisor = Bun.spawn(["bun", "dist/server/entry.mjs"], {
-    cwd: site,
+function startWorkers(script: string, port: number) {
+  // A relative --cwd must not be applied again by each worker.
+  return Bun.spawn(["bun", "--cwd", "site", script], {
+    cwd: temporary,
     env: {
       ...Bun.env,
       HOST: "127.0.0.1",
@@ -140,20 +145,84 @@ async function testWorkers() {
     stdout: "inherit",
     stderr: "inherit",
   });
-  const url = `http://127.0.0.1:${port}/api/worker`;
-  await waitFor(url);
-  // Bun only balances reusePort connections on Linux.
-  const expected = process.platform === "linux" ? ["0", "1"] : ["0"];
-  const seen = new Set<string>();
-  for (let attempt = 0; attempt < 200 && seen.size < expected.length;) {
-    const response = await fetch(url, { keepalive: false });
-    seen.add(await response.text());
-    attempt += 1;
-    await Bun.sleep(25);
+}
+
+async function waitForRefused(url: string) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    try {
+      await fetch(url, { keepalive: false });
+    } catch {
+      return;
+    }
+    await Bun.sleep(50);
   }
-  assert.deepEqual([...seen].sort(), expected, "workers did not all serve");
-  supervisor.kill("SIGTERM");
-  assert.equal(await supervisor.exited, 0);
+  throw new Error(`${url} is still served`);
+}
+
+async function testWorkers(script: string, drains: boolean) {
+  const port = await reservePort();
+  const url = `http://127.0.0.1:${port}/api/worker`;
+  let supervisor = startWorkers(script, port);
+  try {
+    await waitFor(url);
+    // Bun only balances reusePort connections on Linux.
+    const expected = process.platform === "linux" ? ["0", "1"] : ["0"];
+    const seen = new Set<string>();
+    for (let attempt = 0; attempt < 200 && seen.size < expected.length;) {
+      const response = await fetch(url, { keepalive: false });
+      const body = (await response.json()) as {
+        worker: string | null;
+        beforeStart: string | null;
+      };
+      assert.equal(
+        body.beforeStart,
+        String(supervisor.pid),
+        "beforeStart must run once, in the supervisor",
+      );
+      seen.add(String(body.worker));
+      attempt += 1;
+      await Bun.sleep(25);
+    }
+    assert.deepEqual([...seen].sort(), expected, "workers did not all serve");
+
+    if (drains) {
+      const slow = fetch(`http://127.0.0.1:${port}/api/slow`);
+      await Bun.sleep(100);
+      supervisor.kill("SIGTERM");
+      const response = await slow;
+      assert.equal(response.status, 200);
+      assert.equal(await response.text(), "finished");
+    } else {
+      supervisor.kill("SIGTERM");
+    }
+    assert.equal(await supervisor.exited, 0);
+
+    // Workers stop themselves when their supervisor is killed.
+    supervisor = startWorkers(script, port);
+    await waitFor(url);
+    supervisor.kill("SIGKILL");
+    await supervisor.exited;
+    await waitForRefused(url);
+  } finally {
+    supervisor.kill("SIGKILL");
+    await supervisor.exited;
+  }
+}
+
+async function testMiddlewareWorkers() {
+  await writeFile(
+    path.join(site, "custom-server.ts"),
+    `import { handler, options } from "./dist/server/entry.mjs";
+
+Bun.serve({
+  hostname: process.env.HOST,
+  port: Number(process.env.PORT),
+  reusePort: options.reusePort,
+  fetch: (request) => handler(request),
+});
+`,
+  );
+  await testWorkers("custom-server.ts", false);
 }
 
 async function hashedPixelHref(clientDir: string) {
@@ -334,7 +403,7 @@ async function testStandalone() {
   await symlink("../server/entry.mjs", path.join(built, "client/leak.mjs"));
   await symlink("../server/entry.mjs", path.join(built, "client/leak.svg"));
   await testPreview();
-  await testWorkers();
+  await testWorkers("dist/server/entry.mjs", true);
 
   const relocated = path.join(site, "relocated-dist");
   await rename(built, relocated);
@@ -593,6 +662,7 @@ try {
 
   await run(["bunx", "astro", "build"], site, { ADAPTER_MODE: "middleware" });
   await testMiddleware();
+  await testMiddlewareWorkers();
 
   await run(["bunx", "astro", "build"], site, {
     ADAPTER_MODE: "standalone",

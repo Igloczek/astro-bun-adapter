@@ -1,13 +1,15 @@
 import { PACKAGE_NAME } from "./config.js";
 
 export interface SuperviseOptions {
-  /** Command that starts one server process, e.g. `["bun", "./server.ts"]`. */
+  /** Command that starts one worker. */
   command: string[];
-  /**
-   * Number of server processes. Each one must listen with `reusePort: true`;
-   * the exported `options.reusePort` is `true` inside a supervised process.
-   */
+  /** Number of workers. Each one must listen with `reusePort: true`. */
   workers: number;
+  /**
+   * Seconds workers get to exit after `SIGINT` or `SIGTERM` before they are
+   * killed. Defaults to `10`.
+   */
+  shutdownTimeout?: number;
 }
 
 /** Environment variable holding a supervised worker's index, from `0`. */
@@ -16,12 +18,17 @@ export const WORKER_ENV = "ASTRO_BUN_WORKER";
 const RESTART_DELAY_MS = 500;
 const RESTART_WINDOW_MS = 60_000;
 const RESTARTS_PER_WORKER = 3;
+const DEFAULT_SHUTDOWN_TIMEOUT = 10;
 
 function log(message: string, error?: unknown) {
   console.error(`[${PACKAGE_NAME}] ${message}`, ...(error ? [error] : []));
 }
 
-async function run({ command, workers }: SuperviseOptions) {
+async function run({
+  command,
+  workers,
+  shutdownTimeout = DEFAULT_SHUTDOWN_TIMEOUT,
+}: SuperviseOptions) {
   if (
     !Array.isArray(command) ||
     command.length === 0 ||
@@ -34,6 +41,11 @@ async function run({ command, workers }: SuperviseOptions) {
   if (!Number.isSafeInteger(workers) || workers < 1) {
     throw new TypeError(
       `[${PACKAGE_NAME}] 'workers' must be a positive integer.`,
+    );
+  }
+  if (!Number.isFinite(shutdownTimeout) || shutdownTimeout < 0) {
+    throw new TypeError(
+      `[${PACKAGE_NAME}] 'shutdownTimeout' must be a non-negative number of seconds.`,
     );
   }
 
@@ -49,6 +61,7 @@ async function run({ command, workers }: SuperviseOptions) {
 
   const children = new Set<Bun.Subprocess>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
+  let killTimer: ReturnType<typeof setTimeout> | undefined;
   const restarts: number[] = [];
   const stopped = Promise.withResolvers<void>();
   let stopping = false;
@@ -70,6 +83,10 @@ async function run({ command, workers }: SuperviseOptions) {
     exitCode = code;
     for (const timer of timers) clearTimeout(timer);
     signalAll(signal);
+    killTimer = setTimeout(() => {
+      log(`Workers did not stop within ${shutdownTimeout}s; killing them.`);
+      signalAll("SIGKILL");
+    }, shutdownTimeout * 1000);
     stopped.resolve();
   };
 
@@ -128,6 +145,7 @@ async function run({ command, workers }: SuperviseOptions) {
     await stopped.promise;
     await Promise.allSettled([...children].map((child) => child.exited));
   } finally {
+    clearTimeout(killTimer);
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);
   }
@@ -136,9 +154,10 @@ async function run({ command, workers }: SuperviseOptions) {
 
 /**
  * Runs `workers` copies of `command` on one port and exits when they stop.
- * Workers that exit are restarted, unless they exit more than three times per
- * worker within a minute. `SIGINT` and `SIGTERM` are forwarded to every
- * worker; a second signal kills them.
+ * Workers that exit are restarted, unless workers exit more than
+ * `3 × workers` times within a minute. `SIGINT` and `SIGTERM` are forwarded to
+ * every worker; workers still running after `shutdownTimeout`, or when a
+ * second signal arrives, are killed.
  */
 export async function supervise(options: SuperviseOptions): Promise<never> {
   process.exit(await run(options));

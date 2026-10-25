@@ -71,18 +71,6 @@ bunx --bun astro preview
 
 `HOST` and `PORT` override Astro's configured host and port at runtime.
 
-### Multiple processes
-
-Set `workers` to run several Bun processes on one port:
-
-```ts
-adapter: bun({ mode: "standalone", workers: 2 });
-```
-
-`bun ./dist/server/entry.mjs` then supervises that many workers sharing the port with `reusePort`. Bun only balances those connections on Linux, so other platforms run a single worker with a warning. Each worker gets its index, from `0`, in `ASTRO_BUN_WORKER`. A worker that exits is restarted; if workers exit more than three times each within a minute, the supervisor stops them and exits with code `1`, so your process manager can take over. `SIGINT` and `SIGTERM` are forwarded to every worker, and a second signal kills them. `PORT` must not be `0`.
-
-Workers don't share memory, so in-memory state such as `memoryCache()` is per worker. The default filesystem sessions are shared.
-
 ## Middleware
 
 Middleware mode exports a web-standard `(Request, context) => Promise<Response>` handler. Your server is responsible for static files.
@@ -111,21 +99,46 @@ Bun.serve({
 
 The entry module also exports normalized `options` and an idempotent `startServer()` function. Set `ASTRO_BUN_AUTOSTART=disabled` before importing a standalone entry when you need to call `startServer()` yourself.
 
-To run a custom server as several processes, supervise it from a separate script. The workers behave as described in [Multiple processes](#multiple-processes). Inside a worker, the entry's exported `options.reusePort` is `true`, so pass it to `Bun.serve()`:
+## Multiple processes
+
+Set `workers` to run several Bun processes on one port:
 
 ```ts
-// supervisor.ts, started with `bun ./supervisor.ts`
-import { supervise } from "@igloczek/astro-bun-adapter/supervisor.js";
+adapter: bun({ mode: "standalone", workers: 2 });
+```
 
-await supervise({ command: ["bun", "./server.ts"], workers: 2 });
+The process that starts the server becomes a supervisor. It reruns its own command as that many workers sharing the port with `reusePort`. For a standalone build that is `bun ./dist/server/entry.mjs`. In middleware mode it is your `bun ./server.ts`: importing the entry turns the first process into the supervisor, and that import never resolves. So code after the import, including your `Bun.serve()`, only runs in the workers. Pass the entry's exported `options.reusePort` to `Bun.serve()`; it is `true` inside a worker.
+
+- Bun only balances `reusePort` connections on Linux. Other platforms run a single worker and log a warning.
+- `ASTRO_BUN_WORKERS` overrides `workers` at runtime. Each worker gets its index, from `0`, in `ASTRO_BUN_WORKER`.
+- A worker that exits is restarted. If workers exit more than `3 × workers` times within a minute, the supervisor stops them and exits with code `1`, so your process manager can take over.
+- `SIGINT` and `SIGTERM` are forwarded to every worker. Standalone workers finish in-flight requests first; in middleware mode, stopping your server is up to you. Workers still running after 10 seconds, or when a second signal arrives, are killed.
+- Workers exit on their own if the supervisor is killed.
+- `PORT` must not be `0`.
+- `ASTRO_BUN_AUTOSTART=disabled` turns off supervision, and so does calling `startServer()` yourself.
+
+Workers don't share memory, so in-memory state such as `memoryCache()` is per worker. The default filesystem sessions are shared.
+
+## Before start
+
+`beforeStart` names a module, relative to the project root, that runs once before the server starts. With workers it runs in the supervisor, before any worker starts. Use it for one-time setup such as editing `/etc/hosts`. Changes it makes to `process.env` reach the workers.
+
+```ts
+adapter: bun({
+  mode: "standalone",
+  workers: 2,
+  beforeStart: "./src/before-start.ts",
+});
 ```
 
 ```ts
-// server.ts
-import { handler, options } from "./dist/server/entry.mjs";
-
-Bun.serve({ port: 3000, reusePort: options.reusePort, fetch: handler });
+// src/before-start.ts
+export default async function beforeStart() {
+  // Runs once, before anything listens.
+}
 ```
+
+The module is bundled into the build. If its default export is a function, it is awaited, and a failure stops startup. `astro preview` runs it too; it doesn't run in `astro dev`. When you disable autostart, call the entry's exported `beforeStart()` yourself.
 
 ## Options
 
@@ -135,7 +148,8 @@ Bun.serve({ port: 3000, reusePort: options.reusePort, fetch: handler });
 | `staticHeaders`                | `false`           | Serve Astro-generated CSP headers for prerendered files |
 | `bodySizeLimit`                | Bun default       | Maximum body bytes; `0`/`Infinity` disables the limit   |
 | `reusePort`                    | `false`           | Allow multiple Bun processes on one port                |
-| `workers`                      | `1`               | Standalone processes to run on one port (Linux)         |
+| `workers`                      | `1`               | Server processes to run on one port (Linux)             |
+| `beforeStart`                  | none              | Module to run once before the server starts             |
 | `idleTimeout`                  | Bun default (10s) | `0` disables it; maximum is 255 seconds                 |
 | `trustedProxies`               | `[]`              | Exact proxy IPs allowed to supply `X-Forwarded-For`     |
 | `tls`                          | none              | Certificate/key paths for native TLS                    |

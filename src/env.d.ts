@@ -16,3 +16,8 @@ declare module "virtual:igloczek-astro-bun-adapter:config" {
   export const trustedProxies: Options["trustedProxies"];
   export const workers: Options["workers"];
 }
+
+declare module "virtual:igloczek-astro-bun-adapter:before-start" {
+  /** Runs the `beforeStart` module, if one is configured. */
+  export default function beforeStart(): Promise<void>;
+}

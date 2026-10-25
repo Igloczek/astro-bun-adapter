@@ -1,4 +1,5 @@
 import { isIP } from "node:net";
+import { fileURLToPath } from "node:url";
 
 import { AstroError } from "astro/errors";
 
@@ -38,15 +39,19 @@ export function normalizeIdleTimeout(value: number | undefined) {
   return value;
 }
 
-function validateWorkers(value: unknown, mode: UserOptions["mode"]) {
-  if (value === undefined) return;
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {
+export function isWorkerCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
+}
+
+function validateWorkers(value: unknown) {
+  if (value !== undefined && !isWorkerCount(value)) {
     optionError("'workers' must be a positive integer.");
   }
-  if (value > 1 && mode !== "standalone") {
-    optionError(
-      `'workers' requires standalone mode. Run a custom server with supervise() from ${PACKAGE_NAME}/supervisor.js.`,
-    );
+}
+
+function validateBeforeStart(value: unknown) {
+  if (value !== undefined && (typeof value !== "string" || value === "")) {
+    optionError("'beforeStart' must be a non-empty module path.");
   }
 }
 
@@ -92,7 +97,8 @@ export function normalizeUserOptions(userOptions: UserOptions): UserOptions {
   );
   validateOptionalBoolean("staticHeaders", userOptions.staticHeaders);
   validateOptionalBoolean("reusePort", userOptions.reusePort);
-  validateWorkers(userOptions.workers, userOptions.mode);
+  validateWorkers(userOptions.workers);
+  validateBeforeStart(userOptions.beforeStart);
 
   const bodySizeLimit = normalizeBodySizeLimit(userOptions.bodySizeLimit);
   const idleTimeout = normalizeIdleTimeout(userOptions.idleTimeout);
@@ -116,8 +122,12 @@ export function runtimeOptions(
     optionError("Astro did not provide build.client and build.server URLs.");
   }
 
+  const { beforeStart, ...rest } = userOptions;
   return {
-    ...userOptions,
+    ...rest,
+    ...(beforeStart === undefined
+      ? {}
+      : { beforeStart: fileURLToPath(new URL(beforeStart, astroConfig.root)) }),
     client,
     experimentalDisableStreaming:
       userOptions.experimentalDisableStreaming ?? false,

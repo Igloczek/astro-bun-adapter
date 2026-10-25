@@ -29,10 +29,16 @@ export interface UserOptions {
   /** Allows multiple Bun processes to accept connections on the same port. */
   reusePort?: boolean;
   /**
-   * Standalone server processes to run on one port. Above `1`, the entry
-   * supervises that many workers with `reusePort` (Linux only).
+   * Server processes to run on one port. Above `1`, the process that starts
+   * the server supervises that many workers with `reusePort` (Linux only).
+   * `ASTRO_BUN_WORKERS` overrides it at runtime.
    */
   workers?: number;
+  /**
+   * Module, relative to the project root, that runs once before the server or
+   * its workers start. A default export function is awaited.
+   */
+  beforeStart?: string;
   /**
    * Bun's HTTP idle timeout in seconds (`0` disables it, maximum `255`).
    * When omitted, Bun's 10-second default is preserved.

@@ -24,6 +24,8 @@ const createPreviewServer: CreatePreviewServer = async (preview) => {
       );
     }
     handler = serverModule.handler;
+    // Entries built before `beforeStart` existed don't export it.
+    await serverModule.beforeStart?.();
     options = { ...serverModule.options, reusePort: false };
   } catch (error) {
     const cause = error as NodeJS.ErrnoException & { url?: string };

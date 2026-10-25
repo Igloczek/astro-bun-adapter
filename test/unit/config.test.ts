@@ -5,6 +5,7 @@ import {
   normalizeBodySizeLimit,
   normalizeIdleTimeout,
   normalizeUserOptions,
+  runtimeOptions,
 } from "../../src/config.ts";
 
 describe("adapter options", () => {
@@ -45,11 +46,29 @@ describe("adapter options", () => {
         normalizeUserOptions({ mode: "standalone", workers } as never),
       ).toThrow("'workers' must be a positive integer");
     }
-    expect(() =>
-      normalizeUserOptions({ mode: "middleware", workers: 2 }),
-    ).toThrow("supervise()");
-    expect(normalizeUserOptions({ mode: "middleware", workers: 1 })).toEqual(
-      expect.objectContaining({ workers: 1 }),
+    expect(normalizeUserOptions({ mode: "middleware", workers: 2 })).toEqual(
+      expect.objectContaining({ workers: 2 }),
     );
+    for (const beforeStart of ["", 1]) {
+      expect(() =>
+        normalizeUserOptions({ mode: "standalone", beforeStart } as never),
+      ).toThrow("beforeStart");
+    }
+  });
+
+  test("resolves beforeStart against the project root", () => {
+    const options = runtimeOptions(
+      { mode: "standalone", beforeStart: "./src/before-start.ts" },
+      {
+        root: new URL("file:///project/"),
+        build: {
+          client: new URL("file:///project/dist/client/"),
+          server: new URL("file:///project/dist/server/"),
+        },
+        server: { host: false, port: 4321 },
+      } as never,
+    );
+    expect(options.beforeStart).toBe("/project/src/before-start.ts");
+    expect(options.workers).toBe(1);
   });
 });
