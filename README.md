@@ -34,7 +34,7 @@
 
 - Astro 7
 - Bun 1.3.14 or newer
-- Node.js 22.12 or newer for Astro's build tooling
+- Node.js for Astro's build tooling, at the version your Astro release requires (22.12 for Astro 7.0, 22.23.4 since Astro 7.4.2)
 
 ## Install
 
