@@ -1,3 +1,5 @@
+import { isIP } from "node:net";
+
 import type { AstroIntegrationLogger } from "astro";
 
 export function logListeningOn(
@@ -12,7 +14,11 @@ export function logListeningOn(
         : "localhost"
       : (configuredHost ?? "0.0.0.0");
   const printableHost =
-    host === "0.0.0.0" || host === "::" ? "localhost" : host;
+    host === "0.0.0.0" || host === "::"
+      ? "localhost"
+      : isIP(host) === 6
+        ? `[${host}]`
+        : host;
   logger.info(
     `Server listening on ${server.protocol ?? "http"}://${printableHost}:${server.port}`,
   );
