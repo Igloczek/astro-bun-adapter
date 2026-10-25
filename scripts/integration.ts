@@ -272,6 +272,17 @@ async function assertCoolifyOrigin(baseUrl: string) {
   );
 }
 
+async function assertUntrustedHostIgnored(baseUrl: string) {
+  const port = Number(new URL(baseUrl).port);
+  const { status, body } = await rawRequest(port, "/", {}, "evil.example");
+  assert.equal(status, 200);
+  assert.match(
+    body,
+    new RegExp(`data-origin="http://localhost:${port}"`),
+    "a Host outside security.allowedDomains must not control Astro.url",
+  );
+}
+
 async function assertPrerenderedRouting(baseUrl: string) {
   let response = await fetch(`${baseUrl}/data/unknown.json`);
   assert.equal(
@@ -313,6 +324,7 @@ async function testStandalone() {
     assert.match(home, /data-address="203\.0\.113\.8"/);
     assert.match(home, /data-origin="https:\/\/127\.0\.0\.1:\d+"/);
     await assertCoolifyOrigin(runner.baseUrl);
+    await assertUntrustedHostIgnored(runner.baseUrl);
     await assertPrerenderedRouting(runner.baseUrl);
     const pixelHref = await hashedPixelHref(
       path.join(site, "relocated-dist/client"),
@@ -483,6 +495,7 @@ async function testMiddleware() {
     assert.match(html, /data-message="middleware"/);
     assert.match(html, /data-origin="https:\/\/127\.0\.0\.1:\d+"/);
     await assertCoolifyOrigin(runner.baseUrl);
+    await assertUntrustedHostIgnored(runner.baseUrl);
     await assertPrerenderedRouting(runner.baseUrl);
     await assertImageLoads(runner.baseUrl, "/api/pixel.png");
     await assertImageIgnoresHost(runner.baseUrl, "/api/pixel.png");

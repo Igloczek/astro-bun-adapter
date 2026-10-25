@@ -111,6 +111,20 @@ The entry module also exports normalized `options` and an idempotent `startServe
 | `tls`                          | none              | Certificate/key paths for native TLS                    |
 | `experimentalDisableStreaming` | `false`           | Disable Astro HTML streaming                            |
 
+### Allowed domains
+
+Bun builds `request.url` from the client's `Host` header. Configure Astro's [`security.allowedDomains`](https://docs.astro.build/en/reference/configuration-reference/#securityalloweddomains) in production so only your public domains can control `Astro.url`. With an allowlist, any other host is replaced with `localhost:<port>`, so a forged `Host` cannot poison absolute URLs, redirects, or origin checks. Without one, the `Host` header is used as sent.
+
+```ts
+export default defineConfig({
+  security: {
+    allowedDomains: [{ hostname: "example.com", protocol: "https" }],
+  },
+});
+```
+
+In middleware mode, pass `serverPort` so the fallback origin uses the port your server listens on.
+
 ### Image optimization
 
 The adapter uses Astro's built-in image endpoint (`/_image`), which optimizes images on demand. It loads remote sources allowed by `image.domains` / `image.remotePatterns`, and local sources (files in `dist/client` or routes rendered on demand) by requesting them from the server's own origin.

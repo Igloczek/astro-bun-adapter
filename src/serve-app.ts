@@ -90,6 +90,27 @@ export function applyImageEndpointOrigin(
   return rewritten;
 }
 
+/**
+ * When `security.allowedDomains` is configured, only a matching `Host` may
+ * control `request.url`. Anything else is replaced with
+ * `localhost:<serverPort>`, so a forged Host cannot reach `Astro.url`, origin
+ * checks, or redirects. Without an allowlist the Host is left untouched.
+ */
+export function applyTrustedHost(
+  request: Request,
+  allowedDomains: readonly unknown[] | undefined,
+  hostTrusted: boolean,
+  serverPort: number,
+) {
+  if (!allowedDomains?.length || hostTrusted) return request;
+
+  const url = new URL(request.url);
+  const fallbackHost = serverPort ? `localhost:${serverPort}` : "localhost";
+  if (url.host === fallbackHost) return request;
+  url.host = fallbackHost;
+  return new Request(url, request);
+}
+
 async function readErrorPageFromDisk(
   client: string,
   status: 404 | 500,
@@ -141,7 +162,23 @@ export function createAppHandler(
     }
 
     try {
-      let incoming = applyForwardedOrigin(request);
+      const allowedDomains = app.getAllowedDomains();
+      const forwarded = applyForwardedOrigin(request);
+      const forwardedUrl = new URL(forwarded.url);
+      // Decide once, on the client's Host, and reuse it for every rewrite.
+      const hostTrusted =
+        Boolean(allowedDomains?.length) &&
+        BaseApp.validateForwardedHost(
+          forwardedUrl.host,
+          allowedDomains,
+          forwardedUrl.protocol.slice(0, -1),
+        );
+      let incoming = applyTrustedHost(
+        forwarded,
+        allowedDomains,
+        hostTrusted,
+        context.serverPort ?? options.port,
+      );
       const clientAddress = resolveClientAddress(
         incoming,
         context.clientAddress,
@@ -158,19 +195,12 @@ export function createAppHandler(
         routeData?.type === "endpoint" &&
         routeData.route === options.imageEndpointRoute
       ) {
-        const allowedDomains = app.getAllowedDomains();
-        const url = new URL(incoming.url);
         incoming = applyImageEndpointOrigin(
           incoming,
           new URL(request.url),
           options.host,
           context.serverPort ?? options.port,
-          Boolean(allowedDomains?.length) &&
-            BaseApp.validateForwardedHost(
-              url.host,
-              allowedDomains,
-              url.protocol.slice(0, -1),
-            ),
+          hostTrusted,
         );
       }
       const renderOptions = {
