@@ -48,7 +48,9 @@ function runtimeTls(config: TlsOptions | undefined) {
   };
 }
 
-const HTTP2_MIN_BUN_VERSION = "1.4.1";
+// HTTP/2 shipped in Bun 1.4.1, but streamed responses under client flow
+// control leaked a pending request (blocking graceful stop) until 1.4.3.
+const HTTP2_MIN_BUN_VERSION = "1.4.3";
 
 function runtimeHttp2(enabled: boolean | undefined) {
   if (!enabled) return {};

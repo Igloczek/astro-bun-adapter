@@ -4,7 +4,7 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## Unreleased
 
-- Add an opt-in `http2` option. Bun 1.4.1+ serves HTTP/2 next to HTTP/1.1 on the same port (ALPN with `tls`, prior knowledge in cleartext). Older Bun versions fail at startup instead of silently ignoring it.
+- Add an opt-in `http2` option. Bun 1.4.3+ serves HTTP/2 next to HTTP/1.1 on the same port (ALPN with `tls`, prior knowledge in cleartext). Older Bun versions fail at startup instead of silently ignoring it.
 - Respect `session: false` (Astro 7.2+): the adapter no longer enables filesystem sessions when sessions are explicitly disabled, so Astro can tree-shake the session runtime.
 
 ## 0.2.1 - 2026-08-14

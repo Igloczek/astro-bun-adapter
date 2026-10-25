@@ -1,3 +1,5 @@
+import { connect } from "node:http2";
+
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { createServer } from "../../src/standalone.ts";
@@ -55,7 +57,7 @@ describe("native Bun server", () => {
     await stopping;
   });
 
-  test.skipIf(!Bun.semver.satisfies(Bun.version, ">=1.4.1"))(
+  test.skipIf(!Bun.semver.satisfies(Bun.version, ">=1.4.3"))(
     "serves HTTP/2 and HTTP/1.1 on one port when http2 is enabled",
     async () => {
       const server = createServer(
@@ -86,7 +88,51 @@ describe("native Bun server", () => {
     },
   );
 
-  test.skipIf(Bun.semver.satisfies(Bun.version, ">=1.4.1"))(
+  test.skipIf(!Bun.semver.satisfies(Bun.version, ">=1.4.3"))(
+    "drains streamed HTTP/2 responses under client flow control",
+    async () => {
+      const chunk = new Uint8Array(16 * 1024).fill(97);
+      const server = createServer(
+        async () =>
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                for (let index = 0; index < 16; index += 1) {
+                  controller.enqueue(chunk);
+                }
+                controller.close();
+              },
+            }),
+          ),
+        "127.0.0.1",
+        0,
+        { http2: true, reusePort: false },
+      );
+      servers.push(server);
+
+      const client = connect(`http://127.0.0.1:${server.port}`, {
+        settings: { initialWindowSize: 1024 },
+      });
+      const received = await new Promise<number>((resolve, reject) => {
+        let length = 0;
+        const stream = client.request({ ":path": "/" });
+        stream.on("data", (data: Buffer) => (length += data.length));
+        stream.on("end", () => resolve(length));
+        stream.on("error", reject);
+        stream.end();
+      });
+      client.close();
+      expect(received).toBe(16 * chunk.length);
+
+      const stopped = await Promise.race([
+        server.stop().then(() => true),
+        Bun.sleep(2_000).then(() => false),
+      ]);
+      expect(stopped).toBe(true);
+    },
+  );
+
+  test.skipIf(Bun.semver.satisfies(Bun.version, ">=1.4.3"))(
     "refuses http2 on Bun releases without HTTP/2 support",
     () => {
       expect(() =>

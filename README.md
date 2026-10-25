@@ -77,7 +77,7 @@ The entry module also exports normalized `options` and an idempotent `startServe
 | `staticHeaders`                | `false`           | Serve Astro-generated CSP headers for prerendered files |
 | `bodySizeLimit`                | Bun default       | Maximum body bytes; `0`/`Infinity` disables the limit   |
 | `reusePort`                    | `false`           | Allow multiple Bun processes on one port                |
-| `http2`                        | `false`           | Also serve HTTP/2 on the same port (Bun 1.4.1+)         |
+| `http2`                        | `false`           | Also serve HTTP/2 on the same port (Bun 1.4.3+)         |
 | `idleTimeout`                  | Bun default (10s) | `0` disables it; maximum is 255 seconds                 |
 | `trustedProxies`               | `[]`              | Exact proxy IPs allowed to supply `X-Forwarded-For`     |
 | `tls`                          | none              | Certificate/key paths for native TLS                    |
