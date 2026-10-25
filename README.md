@@ -18,7 +18,6 @@
   <a href="#standalone-server">Standalone</a> ·
   <a href="#middleware">Middleware</a> ·
   <a href="#options">Options</a> ·
-  <a href="#static-serving">Static serving</a> ·
   <a href="#comparison-with-other-bun-adapters">Compare adapters</a>
 </p>
 
@@ -33,9 +32,11 @@
 
 ## Requirements
 
-- Astro 7.2.8 or newer. Earlier Astro 7 releases have known security vulnerabilities, including a critical RCE in AVIF image optimization (fixed in 7.2.8).
-- Bun 1.4.4 or newer. Earlier releases have known security vulnerabilities in the bundled brotli decoder and root certificate store, both used by outbound `fetch` (for example remote images).
-- Node.js for Astro's build tooling, at the version your Astro release requires (22.23.4 since Astro 7.4.2)
+- Astro 7.2.8 or newer
+- Bun 1.4.4 or newer
+- Node.js for Astro's build tooling, at the version your Astro release requires
+
+Older Astro and Bun releases have known security vulnerabilities.
 
 ## Install
 
@@ -56,24 +57,18 @@ export default defineConfig({
 });
 ```
 
-Build and run the generated server:
+Build and run:
 
 ```sh
 bunx astro build
 bun ./dist/server/entry.mjs
 ```
 
-Run Astro preview with Bun as the script interpreter:
-
-```sh
-bunx --bun astro preview
-```
-
-`HOST` and `PORT` override Astro's configured host and port at runtime.
+`HOST` and `PORT` override the configured host and port. Preview with `bunx --bun astro preview`.
 
 ## Middleware
 
-Middleware mode exports a web-standard `(Request, context) => Promise<Response>` handler. Your server is responsible for static files.
+Middleware mode exports a Fetch handler for your own `Bun.serve()`. Your server is responsible for static files.
 
 ```ts
 // astro.config.ts
@@ -88,50 +83,14 @@ Bun.serve({
   port: 3000,
   fetch(request, server) {
     const clientAddress = server.requestIP(request)?.address;
-    return handler(request, {
-      ...(clientAddress ? { clientAddress } : {}),
-      serverPort: server.port,
-      locals: { requestId: crypto.randomUUID() },
-    });
+    return handler(request, { clientAddress, serverPort: server.port });
   },
 });
 ```
 
-The entry module also exports normalized `options` and an idempotent `startServer()` function. Set `ASTRO_BUN_AUTOSTART=disabled` before importing a standalone entry when you need to call `startServer()` yourself.
+## Behind a reverse proxy
 
-## Multiple processes
-
-```ts
-adapter: bun({
-  mode: "standalone",
-  workers: 2,
-  beforeStart: ["./src/before-start.ts", "@shared/runtime/setup"],
-});
-```
-
-`workers` runs that many processes on one port (Linux only; elsewhere it runs one). Crashed workers restart. In middleware mode, your own server runs unchanged in every worker; pass `options.reusePort` to `Bun.serve()`.
-
-`beforeStart` runs these modules once, in order, before any worker starts. Use a path relative to the project root, or any import specifier. A default export function is awaited.
-
-## Options
-
-| Option                         | Default           | Purpose                                                 |
-| ------------------------------ | ----------------- | ------------------------------------------------------- |
-| `mode`                         | required          | `standalone` or `middleware`                            |
-| `staticHeaders`                | `false`           | Serve Astro-generated CSP headers for prerendered files |
-| `bodySizeLimit`                | Bun default       | Maximum body bytes; `0`/`Infinity` disables the limit   |
-| `reusePort`                    | `false`           | Allow multiple Bun processes on one port                |
-| `workers`                      | `1`               | Server processes to run on one port (Linux)             |
-| `beforeStart`                  | none              | Modules to run once before the server starts            |
-| `idleTimeout`                  | Bun default (10s) | `0` disables it; maximum is 255 seconds                 |
-| `trustedProxies`               | `[]`              | Exact proxy IPs allowed to supply `X-Forwarded-For`     |
-| `experimentalDisableStreaming` | `false`           | Disable Astro HTML streaming                            |
-
-### Allowed domains
-
-The `Host` header only controls `Astro.url` when it matches Astro's [`security.allowedDomains`](https://docs.astro.build/en/reference/configuration-reference/#securityalloweddomains). Any other host is replaced with `localhost:<port>`, so a forged `Host` cannot poison absolute URLs, redirects, or origin checks. This matches `@astrojs/node`.
-
-List your public domains in production. Otherwise `Astro.url` reports `localhost` and `security.checkOrigin` rejects form posts from your real origin:
+Add your public domain to Astro's [`security.allowedDomains`](https://docs.astro.build/en/reference/configuration-reference/#securityalloweddomains). Without it, `Astro.url` reports `localhost` and form posts fail Astro's origin check.
 
 ```ts
 export default defineConfig({
@@ -141,47 +100,27 @@ export default defineConfig({
 });
 ```
 
-In middleware mode, pass `serverPort` so the fallback origin uses the port your server listens on.
-
-#### Migrating from 0.2
-
-Deployments behind a domain, such as Coolify, Caddy, or Traefik with TLS terminated at the proxy, must add that domain to `security.allowedDomains`. Without it, `Astro.url` reports `https://localhost:<port>` and form posts from the public origin fail `security.checkOrigin` with 403.
-
-Native TLS was removed: the `tls` option and the `SERVER_CERT_PATH`, `SERVER_KEY_PATH`, `SERVER_CA_PATH` and `SERVER_KEY_PASSPHRASE` variables. Terminate TLS at your reverse proxy or load balancer instead. The build fails while `tls` is configured, and the server refuses to start while those variables are set.
-
-### Image optimization
-
-The adapter uses Astro's built-in image endpoint (`/_image`), which optimizes images on demand. It loads remote sources allowed by `image.domains` / `image.remotePatterns`, and local sources (files in `dist/client` or routes rendered on demand) by requesting them from the server's own origin.
-
-Bun derives that origin from the client's `Host` header, so the adapter only keeps it when it matches Astro's [`security.allowedDomains`](https://docs.astro.build/en/reference/configuration-reference/#securityalloweddomains). Otherwise, local sources are requested from the server's listening address, such as `http://127.0.0.1:<port>`, and forwarded origin headers are dropped, so a forged `Host` or `X-Forwarded-Host` cannot make the server fetch from another host. An allowlist entry without a `port` trusts every port on that hostname, so include `port` when that matters. In middleware mode, pass `serverPort` so that address uses your server's port.
-
-### Trusted proxies
-
-`X-Forwarded-For` is ignored unless the direct peer is listed in `trustedProxies`. The adapter walks the forwarding chain from right to left and returns the last untrusted address, preventing a client from forging the leftmost value through a well-behaved proxy.
-
-`X-Forwarded-Proto` is applied when the first hop is `http` or `https`. That restores the public scheme (`Astro.url`, origin checks) behind a TLS-terminating proxy (Coolify, Caddy, Traefik). The adapter never applies `X-Forwarded-Host` itself; Astro applies it, and `X-Forwarded-Proto`/`X-Forwarded-Port`, only when they match `security.allowedDomains`.
+To get the visitor's IP in `Astro.clientAddress` instead of the proxy's, list the proxy's IP in `trustedProxies`:
 
 ```ts
-bun({
-  mode: "standalone",
-  trustedProxies: ["127.0.0.1", "10.0.0.10"],
-});
+adapter: bun({ mode: "standalone", trustedProxies: ["10.0.1.5"] });
 ```
 
-Use the actual address returned by `Bun.serve().requestIP()`; IPv4-mapped IPv6 addresses and plain IPv4 addresses are distinct strings.
+Use the address the proxy connects from. For a Docker proxy, find it with `docker inspect <proxy-container>`.
 
-## Static serving
+## Options
 
-Standalone mode provides:
-
-- traversal and symlink containment inside `dist/client`
-- dotfile denial with `/.well-known` support
-- `GET`/`HEAD`, ETag, Last-Modified, conditional requests, and single byte ranges
-- immutable caching for Astro's generated asset directory
-- clean URLs, base paths, and Astro trailing-slash redirects
-- Astro-generated CSP headers for prerendered routes
-
-Unsupported multi-range requests are safely served as complete `200` responses.
+| Option                         | Default     | Purpose                                                    |
+| ------------------------------ | ----------- | ---------------------------------------------------------- |
+| `mode`                         | required    | `standalone` or `middleware`                               |
+| `workers`                      | `1`         | Server processes on one port (Linux); crashed ones restart |
+| `beforeStart`                  | none        | Modules to run once before the server starts               |
+| `reusePort`                    | `false`     | Allow multiple Bun processes on one port                   |
+| `bodySizeLimit`                | Bun default | Maximum request body bytes                                 |
+| `idleTimeout`                  | `10`        | Seconds before an idle connection closes                   |
+| `trustedProxies`               | `[]`        | Proxy IPs trusted for `X-Forwarded-For` client addresses   |
+| `staticHeaders`                | `false`     | Serve Astro-generated CSP headers for prerendered files    |
+| `experimentalDisableStreaming` | `false`     | Disable Astro HTML streaming                               |
 
 ## Comparison with other Bun adapters
 
@@ -219,8 +158,6 @@ Unsupported multi-range requests are safely served as complete `200` responses.
 
 ## Compatibility and releases
 
-Every change is checked against the oldest supported Astro 7 release and the current Astro 7 release, using the packed npm tarball in standalone and middleware fixtures. Releases are published from GitHub Actions with npm trusted publishing and provenance.
-
-This adapter was derived from the MIT-licensed `@astrojs/node` adapter and keeps its Astro integration contract intentionally close to upstream. It replaces Node's HTTP bridge with native Bun Request/Response handling.
+CI tests the oldest and newest supported Astro 7 releases. Releases are published with npm provenance. The adapter is derived from `@astrojs/node` and keeps its integration contract close to upstream.
 
 See [CHANGELOG.md](./CHANGELOG.md), [CONTRIBUTING.md](./CONTRIBUTING.md), and [SECURITY.md](./SECURITY.md).
