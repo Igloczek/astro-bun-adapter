@@ -8,6 +8,20 @@ const VIRTUAL_BEFORE_START_ID =
 const RESOLVED_VIRTUAL_BEFORE_START_ID = `\0${VIRTUAL_BEFORE_START_ID}`;
 const SERVER_ENVIRONMENTS = new Set(["ssr", "prerender", "astro"]);
 
+const UNSAFE_CHARS: Record<string, string> = {
+  "<": "\\u003C",
+  ">": "\\u003E",
+  "\u2028": "\\u2028",
+  "\u2029": "\\u2029",
+};
+
+/** A JavaScript literal for `value`, safe to embed in generated code. */
+export function toLiteral(value: unknown) {
+  const json = JSON.stringify(value);
+  if (json === undefined) return "undefined";
+  return json.replace(/[<>\u2028\u2029]/g, (char) => UNSAFE_CHARS[char]!);
+}
+
 export function createConfigPlugin(config: Options): VitePlugin {
   return {
     name: VIRTUAL_CONFIG_ID,
@@ -35,7 +49,7 @@ export function createConfigPlugin(config: Options): VitePlugin {
         if (id === RESOLVED_VIRTUAL_BEFORE_START_ID) {
           // Imported on demand, so workers never evaluate the modules.
           const loaders = (beforeStart ?? []).map(
-            (module) => `() => import(${JSON.stringify(module)})`,
+            (module) => `() => import(${toLiteral(module)})`,
           );
           return `export default async () => {
   for (const load of [${loaders.join(", ")}]) {
@@ -45,9 +59,7 @@ export function createConfigPlugin(config: Options): VitePlugin {
 };`;
         }
         return Object.entries(options)
-          .map(
-            ([key, value]) => `export const ${key} = ${JSON.stringify(value)};`,
-          )
+          .map(([key, value]) => `export const ${key} = ${toLiteral(value)};`)
           .join("\n");
       },
     },
