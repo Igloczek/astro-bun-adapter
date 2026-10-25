@@ -116,7 +116,13 @@ async function testPreview() {
     ],
     {
       cwd: site,
-      env: { ...Bun.env, ADAPTER_MODE: "standalone" },
+      // Astro detaches preview when it detects an AI agent; stay attached so
+      // the kill below stops the server instead of leaking it.
+      env: {
+        ...Bun.env,
+        ADAPTER_MODE: "standalone",
+        ASTRO_PREVIEW_BACKGROUND: "1",
+      },
       stdout: "inherit",
       stderr: "inherit",
     },
