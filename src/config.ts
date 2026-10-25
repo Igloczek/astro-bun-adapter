@@ -62,9 +62,10 @@ function validateBeforeStart(value: unknown) {
 }
 
 function resolveModule(specifier: string, root: URL) {
-  // Relative paths are from the project root; Vite resolves the rest.
-  return /^\.\.?\//.test(specifier)
-    ? fileURLToPath(new URL(specifier, root))
+  // Relative paths, with either slash, are from the project root; Vite
+  // resolves the rest.
+  return /^\.\.?[\\/]/.test(specifier)
+    ? fileURLToPath(new URL(specifier.replaceAll("\\", "/"), root))
     : specifier;
 }
 

@@ -60,7 +60,13 @@ describe("adapter options", () => {
     const options = runtimeOptions(
       {
         mode: "standalone",
-        beforeStart: ["./src/before-start.ts", "@shared/setup", "../x.ts"],
+        beforeStart: [
+          "./src/before-start.ts",
+          "@shared/setup",
+          "../x.ts",
+          ".\\src\\windows.ts",
+          "..\\y.ts",
+        ],
       },
       {
         root: new URL("file:///project/"),
@@ -75,6 +81,8 @@ describe("adapter options", () => {
       "/project/src/before-start.ts",
       "@shared/setup",
       "/x.ts",
+      "/project/src/windows.ts",
+      "/y.ts",
     ]);
     expect(options.workers).toBe(1);
   });
