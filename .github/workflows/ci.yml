@@ -39,17 +39,22 @@ jobs:
         run: bun run check
 
   integration:
-    name: Bun ${{ matrix.bun }} / Astro ${{ matrix.astro }}
+    # Stable names: branch protection requires these checks, so they must not
+    # change when the supported Bun or Astro versions do.
+    name: Integration (${{ matrix.target }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - bun: 1.4.4
+          - target: oldest supported
+            bun: 1.4.4
             astro: 7.2.8
-          - bun: 1.4.4
+          - target: latest Astro
+            bun: 1.4.4
             astro: ^7.2.8
-          - bun: latest
+          - target: latest Bun and Astro
+            bun: latest
             astro: ^7.2.8
     steps:
       - name: Check out repository
