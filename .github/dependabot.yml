@@ -7,6 +7,10 @@ updates:
     groups:
       development-dependencies:
         dependency-type: development
+    ignore:
+      # Keep Bun types on the minimum supported runtime (engines.bun) so newer
+      # Bun APIs fail typechecking instead of breaking Bun 1.3.14 users.
+      - dependency-name: "@types/bun"
 
   - package-ecosystem: github-actions
     directory: /
