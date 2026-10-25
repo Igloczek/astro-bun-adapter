@@ -1,9 +1,10 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 
 import {
   applyForwardedOrigin,
   applyImageEndpointOrigin,
   applyTrustedHost,
+  defaultServerPort,
   resolveClientAddress,
 } from "../../src/serve-app.ts";
 
@@ -165,5 +166,26 @@ describe("Host validation", () => {
     const result = applyTrustedHost(request, false, 8080);
     expect(result.url).toBe("https://localhost:8080/path?q=1");
     expect(result.method).toBe("POST");
+  });
+});
+
+describe("default server port", () => {
+  const original = process.env.PORT;
+  afterEach(() => {
+    if (original === undefined) delete process.env.PORT;
+    else process.env.PORT = original;
+  });
+
+  test("prefers PORT, which the server listens on, over server.port", () => {
+    process.env.PORT = "4578";
+    expect(defaultServerPort(4321)).toBe(4578);
+  });
+
+  test("falls back to server.port without a usable PORT", () => {
+    for (const value of [undefined, "", "0", "abc", "70000"]) {
+      if (value === undefined) delete process.env.PORT;
+      else process.env.PORT = value;
+      expect(defaultServerPort(4321)).toBe(4321);
+    }
   });
 });

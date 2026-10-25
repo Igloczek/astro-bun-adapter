@@ -20,7 +20,7 @@ The first stable release. It adds multi-process workers and a startup hook, clos
    ```
 
 3. **If you used the `tls` option, terminate TLS at your proxy instead.** Native TLS is gone, together with the `SERVER_CERT_PATH`, `SERVER_KEY_PATH`, `SERVER_CA_PATH` and `SERVER_KEY_PASSPHRASE` variables. A build with `tls` fails, and the server refuses to start while those variables are set, so a site never quietly falls back to plain HTTP.
-4. **In middleware mode, pass `serverPort` to the handler.** It's only needed when your `Bun.serve()` port differs from Astro's `server.port` (4321 by default). Without it, Astro Image can't load your local images.
+4. **In middleware mode, check which port your server listens on.** If your `Bun.serve()` listens on the `PORT` environment variable (as on Fly, Coolify or with portless) or on Astro's `server.port`, there's nothing to do. Otherwise, pass the port to the handler, or Astro Image can't load your local images:
 
    ```ts
    return handler(request, { clientAddress, serverPort: server.port });

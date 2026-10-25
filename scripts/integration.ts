@@ -250,11 +250,27 @@ Bun.serve({
   hostname: process.env.HOST,
   port: Number(process.env.PORT),
   reusePort: options.reusePort,
-  fetch: (request) => handler(request),
+  fetch: (request, server) =>
+    handler(request, { clientAddress: server.requestIP(request)?.address }),
 });
 `,
   );
   await testWorkers("custom-server.ts", false);
+
+  // The custom server passes no serverPort and listens on PORT, like apps run
+  // by portless or Fly, while Astro's server.port is 4321. Untrusted hosts
+  // and image sources must still resolve to the port the server listens on.
+  const port = await reservePort();
+  const supervisor = startWorkers("custom-server.ts", port);
+  try {
+    const baseUrl = `http://127.0.0.1:${port}`;
+    await waitFor(`${baseUrl}/api/worker`);
+    await assertUntrustedHostIgnored(baseUrl);
+    await assertImageIgnoresHost(baseUrl, "/api/pixel.png");
+  } finally {
+    supervisor.kill("SIGKILL");
+    await supervisor.exited;
+  }
 }
 
 async function hashedPixelHref(clientDir: string) {

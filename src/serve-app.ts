@@ -124,11 +124,22 @@ async function readErrorPageFromDisk(
   }
 }
 
+/**
+ * The port to assume when a middleware caller omits `serverPort`: `PORT`, which
+ * hosts and dev proxies (Fly, Coolify, portless) set for the server to listen
+ * on, then Astro's build-time `server.port`.
+ */
+export function defaultServerPort(port: number) {
+  const value = Number(process.env.PORT);
+  return Number.isInteger(value) && value > 0 && value <= 65_535 ? value : port;
+}
+
 export function createAppHandler(
   app: BaseApp,
   options: Options,
 ): RequestHandler {
   const client = resolveClientDir(options);
+  const fallbackServerPort = defaultServerPort(options.port);
 
   const prerenderedErrorPageFetch = async (url: URL | RequestInfo) => {
     const { pathname } = new URL(url.toString());
@@ -175,7 +186,7 @@ export function createAppHandler(
       let incoming = applyTrustedHost(
         forwarded,
         hostTrusted,
-        context.serverPort ?? options.port,
+        context.serverPort ?? fallbackServerPort,
       );
       const clientAddress = resolveClientAddress(
         incoming,
@@ -197,7 +208,7 @@ export function createAppHandler(
           incoming,
           new URL(request.url),
           options.host,
-          context.serverPort ?? options.port,
+          context.serverPort ?? fallbackServerPort,
           hostTrusted,
         );
       }
