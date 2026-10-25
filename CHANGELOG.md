@@ -25,6 +25,7 @@ First stable release. The adapter options, the `HOST`, `PORT` and `ASTRO_BUN_WOR
 - Respect `session: false` (Astro 7.2+): the adapter no longer enables filesystem sessions when sessions are explicitly disabled, so Astro can tree-shake the session runtime.
 - Return 404 instead of 500 for unknown parameters on a prerendered dynamic endpoint, matching `@astrojs/node` 11.1.2.
 - Bracket IPv6 hosts in the "Server listening on" message, so `HOST=::1` prints `http://[::1]:4321` instead of an invalid URL.
+- Fix the published types of `@igloczek/astro-bun-adapter/server.js`. They imported the adapter's build-time virtual modules, so `options` and `beforeStart` were `any`, or type errors with `skipLibCheck: false`.
 
 ## 0.2.1 - 2026-08-14
 

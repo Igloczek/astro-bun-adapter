@@ -1,7 +1,7 @@
 import { createApp } from "astro/app/entrypoint";
 import { AstroError } from "astro/errors";
 import { setGetEnv } from "astro/env/setup";
-import beforeStart from "virtual:igloczek-astro-bun-adapter:before-start";
+import runBeforeStart from "virtual:igloczek-astro-bun-adapter:before-start";
 import * as config from "virtual:igloczek-astro-bun-adapter:config";
 
 import { PACKAGE_NAME } from "./config.js";
@@ -20,6 +20,10 @@ import {
   stopWithSupervisor,
   workerCount,
 } from "./worker.js";
+import type { Options } from "./types.js";
+
+// Explicit types keep the virtual modules out of the published declarations.
+const beforeStart: () => Promise<void> = runBeforeStart;
 
 setGetEnv((key) => process.env[key]);
 
@@ -51,7 +55,9 @@ if (isWorker) {
 
 // Supervised workers share one port, including custom servers that pass
 // `options.reusePort` to Bun.serve().
-const options = isWorker ? { ...config, reusePort: true } : { ...config };
+const options: Omit<Options, "beforeStart"> = isWorker
+  ? { ...config, reusePort: true }
+  : { ...config };
 
 const app = createApp({ streaming: !options.experimentalDisableStreaming });
 const headersMap = options.staticHeaders
