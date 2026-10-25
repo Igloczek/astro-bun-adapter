@@ -7,6 +7,7 @@ import { resolveClientDir } from "./shared.js";
 import type { BunRequestContext, Options, RequestHandler } from "./types.js";
 
 const FORWARDED_PROTOCOLS = new Set(["http", "https"]);
+const PRERENDERED_ROUTE_TYPES = new Set(["page", "endpoint"]);
 
 function firstForwardedValue(value: string | null) {
   const token = value?.split(",")[0]?.trim().toLowerCase();
@@ -107,7 +108,13 @@ export function createAppHandler(
         context.clientAddress,
         options.trustedProxies,
       );
-      const routeData = app.match(incoming, true);
+      // Include prerendered routes so static-mode redirects stay dynamic, but
+      // re-match without them so a prerendered page or endpoint cannot shadow a
+      // lower-priority on-demand route (or 500 on unknown params).
+      let routeData = app.match(incoming, true);
+      if (routeData?.prerender && PRERENDERED_ROUTE_TYPES.has(routeData.type)) {
+        routeData = app.match(incoming);
+      }
       const renderOptions = {
         addCookieHeader: true,
         ...(clientAddress === undefined ? {} : { clientAddress }),
@@ -115,10 +122,10 @@ export function createAppHandler(
         prerenderedErrorPageFetch,
       };
 
-      if (routeData && !(routeData.type === "page" && routeData.prerender)) {
-        return await app.render(incoming, { ...renderOptions, routeData });
-      }
-      return await app.render(incoming, renderOptions);
+      return await app.render(
+        incoming,
+        routeData ? { ...renderOptions, routeData } : renderOptions,
+      );
     } catch (error) {
       app.adapterLogger.error(`Could not render ${request.url}`);
       console.error(error);

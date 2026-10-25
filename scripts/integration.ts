@@ -231,6 +231,23 @@ async function assertCoolifyOrigin(baseUrl: string) {
   );
 }
 
+async function assertPrerenderedRouting(baseUrl: string) {
+  let response = await fetch(`${baseUrl}/data/unknown.json`);
+  assert.equal(
+    response.status,
+    404,
+    "unknown params of a prerendered endpoint must 404, not 500",
+  );
+
+  response = await fetch(`${baseUrl}/fallback/other`);
+  assert.equal(response.status, 200);
+  assert.match(
+    await response.text(),
+    /on-demand other/,
+    "a prerendered dynamic route must not shadow an on-demand fallback",
+  );
+}
+
 async function testStandalone() {
   const built = path.join(site, "dist");
   await symlink("../server/entry.mjs", path.join(built, "client/leak.mjs"));
@@ -254,6 +271,7 @@ async function testStandalone() {
     assert.match(home, /data-address="203\.0\.113\.8"/);
     assert.match(home, /data-origin="https:\/\/127\.0\.0\.1:\d+"/);
     await assertCoolifyOrigin(runner.baseUrl);
+    await assertPrerenderedRouting(runner.baseUrl);
     await assertImageLoads(
       runner.baseUrl,
       await hashedPixelHref(path.join(site, "relocated-dist/client")),
@@ -358,6 +376,7 @@ async function testMiddleware() {
     assert.match(html, /data-message="middleware"/);
     assert.match(html, /data-origin="https:\/\/127\.0\.0\.1:\d+"/);
     await assertCoolifyOrigin(runner.baseUrl);
+    await assertPrerenderedRouting(runner.baseUrl);
 
     response = await fetch(`${runner.baseUrl}/api/echo`, {
       method: "POST",
