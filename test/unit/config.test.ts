@@ -93,6 +93,6 @@ describe("adapter options", () => {
       "/y.ts",
     ]);
     expect(options.workers).toBe(1);
-    expect(options.shutdownTimeout).toBe(10);
+    expect(options.shutdownTimeout).toBe(60);
   });
 });

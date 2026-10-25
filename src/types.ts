@@ -33,7 +33,7 @@ export interface UserOptions {
    * Seconds a stopping server gets to finish in-flight requests after
    * `SIGTERM` or `SIGINT` before it is killed. Applies to the standalone
    * server and to `workers`. `ASTRO_BUN_SHUTDOWN_TIMEOUT` overrides it at
-   * runtime. Defaults to `10`.
+   * runtime. Defaults to `60`.
    */
   shutdownTimeout?: number;
   /**

@@ -115,7 +115,7 @@ Use the address the proxy connects from. For a Docker proxy, find it with `docke
 | `mode`                         | required    | `standalone` or `middleware`                               |
 | `workers`                      | `1`         | Server processes on one port (Linux); crashed ones restart |
 | `beforeStart`                  | none        | Modules to run once before the server starts               |
-| `shutdownTimeout`              | `10`        | Seconds to finish in-flight requests on SIGTERM/SIGINT     |
+| `shutdownTimeout`              | `60`        | Seconds to finish in-flight requests on SIGTERM/SIGINT     |
 | `reusePort`                    | `false`     | Allow multiple Bun processes on one port                   |
 | `bodySizeLimit`                | Bun default | Maximum request body bytes                                 |
 | `idleTimeout`                  | `10`        | Seconds before an idle connection closes                   |

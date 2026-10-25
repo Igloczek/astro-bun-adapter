@@ -6,7 +6,7 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### New
 
-- **Choose how long shutdown may take with `shutdownTimeout`.** On `SIGTERM` or `SIGINT`, the server stops taking new connections and finishes the requests in flight. After `shutdownTimeout` seconds (10 by default), it is killed. Set it above your longest request or background job, for example `shutdownTimeout: 170`, or at deploy time with `ASTRO_BUN_SHUTDOWN_TIMEOUT`. It applies to the standalone server and to `workers`.
+- **Shutdown waits up to 60 seconds for running work, and you can change that with `shutdownTimeout`.** On `SIGTERM` or `SIGINT` (a deploy, `docker stop`, Ctrl+C), the server stops taking new connections and finishes the requests and jobs in flight. With `workers`, 1.0 killed them after 10 seconds; the default is now 60. For longer work, raise it, for example `shutdownTimeout: 170`, or set `ASTRO_BUN_SHUTDOWN_TIMEOUT` at deploy time. Your platform's own stop grace period still applies, so raise it too: `docker stop` waits only 10 seconds by default (`stop_grace_period` in Compose, `kill_timeout` on Fly).
 
 ### Fixes
 

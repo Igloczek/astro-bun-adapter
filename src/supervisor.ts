@@ -11,7 +11,7 @@ export interface SuperviseOptions {
   workers: number;
   /**
    * Seconds workers get to exit after `SIGINT` or `SIGTERM` before they are
-   * killed. Defaults to `10`.
+   * killed. Defaults to `60`.
    */
   shutdownTimeout?: number;
 }

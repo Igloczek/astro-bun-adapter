@@ -8,7 +8,7 @@ import type { Options, UserOptions } from "./types.js";
 export const PACKAGE_NAME = "@igloczek/astro-bun-adapter";
 export const DEFAULT_REUSE_PORT = false;
 /** Seconds a stopping server gets to finish in-flight requests. */
-export const DEFAULT_SHUTDOWN_TIMEOUT = 10;
+export const DEFAULT_SHUTDOWN_TIMEOUT = 60;
 
 function optionError(message: string): never {
   throw new AstroError(`[${PACKAGE_NAME}] ${message}`);
