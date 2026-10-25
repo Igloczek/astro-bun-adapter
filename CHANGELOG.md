@@ -13,6 +13,7 @@ All notable changes are documented here. This project follows Semantic Versionin
 - **Security:** Astro's `/_image` endpoint fetches local sources from the request origin, which Bun derives from the client's `Host` header, so a forged `Host` made the server send requests, including the client's headers, to an arbitrary host (SSRF). Unless the `Host` matches `security.allowedDomains`, image endpoint requests now load local sources from the server's own listening address, with forwarded origin headers dropped. The image route is taken from Astro's resolved routes. Middleware handlers accept a new `serverPort` context field for that address.
 - Respect `session: false` (Astro 7.2+): the adapter no longer enables filesystem sessions when sessions are explicitly disabled, so Astro can tree-shake the session runtime.
 - Return 404 instead of 500 for unknown parameters on a prerendered dynamic endpoint, matching `@astrojs/node` 11.1.2.
+- Bracket IPv6 hosts in the "Server listening on" message, so `HOST=::1` prints `http://[::1]:4321` instead of an invalid URL.
 
 ## 0.2.1 - 2026-08-14
 
