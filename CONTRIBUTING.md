@@ -1,6 +1,6 @@
 # Contributing
 
-Requirements: Bun 1.3.14 or newer and Node.js 22.12 or newer.
+Requirements: Bun 1.3.14 or newer and Node.js 22.23.4 or newer (the minimum for current Astro 7 releases).
 
 ```sh
 bun install --frozen-lockfile
