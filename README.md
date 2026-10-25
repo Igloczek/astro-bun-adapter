@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@igloczek/astro-bun-adapter"><img src="https://img.shields.io/npm/v/@igloczek/astro-bun-adapter?color=cb3837&logo=npm" alt="npm version"></a>
   <a href="https://astro.build"><img src="https://img.shields.io/badge/Astro-7.2.8%2B-BC52EE?logo=astro&logoColor=white" alt="Astro 7.2.8 or newer"></a>
-  <a href="https://bun.sh"><img src="https://img.shields.io/badge/Bun-1.3.14%2B-14151A?logo=bun&logoColor=white" alt="Bun 1.3.14 or newer"></a>
+  <a href="https://bun.sh"><img src="https://img.shields.io/badge/Bun-1.4.4%2B-14151A?logo=bun&logoColor=white" alt="Bun 1.4.4 or newer"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
 </p>
 
@@ -34,7 +34,7 @@
 ## Requirements
 
 - Astro 7.2.8 or newer. Earlier Astro 7 releases have known security vulnerabilities, including a critical RCE in AVIF image optimization (fixed in 7.2.8).
-- Bun 1.3.14 or newer
+- Bun 1.4.4 or newer. Earlier releases have known security vulnerabilities in the bundled brotli decoder and root certificate store, both used by outbound `fetch` (for example remote images).
 - Node.js for Astro's build tooling, at the version your Astro release requires (22.23.4 since Astro 7.4.2)
 
 ## Install
@@ -173,7 +173,7 @@ Unsupported multi-range requests are safely served as complete `200` responses.
 | ----------------------------- | :-------: | :------------------------------------------------: | :----------------------------------------------------: | :----------------------------------------------------------------------------: |
 | Best for                      | SSR apps  |                 Static + some SSR                  |                       SSR + ISR                        |                                 SSR + caching                                  |
 | Declared Astro                | `^7.2.8`  |                       `^7.4`                       |                         `^6.3`                         |                                     `^6.3`                                     |
-| Minimum Bun                   |  1.3.14   |                       1.4.3                        |                          1.0                           |                                      1.3                                       |
+| Minimum Bun                   |   1.4.4   |                       1.4.3                        |                          1.0                           |                                      1.3                                       |
 | Latest version                |   0.2.1   |                       0.1.4                        |                         2.1.1                          |                                     0.1.2                                      |
 | **Astro features**            |           |                                                    |                                                        |                                                                                |
 | Astro Image (`/_image`)       |    ✅     |                         ✅                         |                           ✅                           |                                       ✅                                       |

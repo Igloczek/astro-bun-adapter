@@ -546,7 +546,7 @@ try {
           "@igloczek/astro-bun-adapter": `file:${archive}`,
           astro: astroVersion,
         },
-        devDependencies: { "@types/bun": "1.3.14" },
+        devDependencies: { "@types/bun": "1.4.4" },
       },
       null,
       2,
