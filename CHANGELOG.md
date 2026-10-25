@@ -4,28 +4,44 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## 1.0.0 - 2026-10-25
 
-First stable release. The adapter options, the `HOST`, `PORT` and `ASTRO_BUN_WORKERS` environment variables, and the middleware `handler` with its context (`clientAddress`, `serverPort`, `locals`) now follow Semantic Versioning: breaking changes wait for 2.0.
+The first stable release. It adds multi-process workers and a startup hook, closes two security holes around the `Host` header, and drops native TLS. From here on, breaking changes to the options, environment variables and middleware handler documented in the README only come in a new major version.
 
-### Upgrading from 0.2
+### Before you upgrade
 
-- Upgrade to Astro 7.3.3 or newer and Bun 1.4.4 or newer.
-- Behind a domain (Coolify, Caddy, Traefik), add it to `security.allowedDomains`. Without it, `Astro.url` reports `localhost:<port>` and form posts from the public origin fail `security.checkOrigin` with 403.
-- Remove the `tls` option and the `SERVER_CERT_PATH`, `SERVER_KEY_PATH`, `SERVER_CA_PATH` and `SERVER_KEY_PASSPHRASE` variables, and terminate TLS at your reverse proxy or load balancer.
-- In middleware mode, pass `serverPort: server.port` to `handler` alongside `clientAddress`. It matters when your `Bun.serve()` port differs from Astro's `server.port`: local `/_image` sources load from that port.
+1. **Update Astro and Bun.** 1.0 needs Astro 7.3.3 or newer and Bun 1.4.4 or newer. Older versions have public security vulnerabilities, including remote code execution through AVIF images in Astro before 7.2.8, XSS in Astro before 7.3.2, and flaws in Bun's `fetch` that remote images in `/_image` go through.
+2. **Behind a domain, list it in `security.allowedDomains`.** This applies if you run behind Coolify, Caddy, Traefik, nginx or a load balancer. The adapter no longer trusts the `Host` header on its own (see the security fixes below). Without this setting, `Astro.url` shows `localhost` instead of your domain, and form and Action posts from your site fail with 403.
 
-### Changes
+   ```ts
+   export default defineConfig({
+     security: {
+       allowedDomains: [{ hostname: "example.com", protocol: "https" }],
+     },
+   });
+   ```
 
-- **Breaking:** require Bun 1.4.4 or newer (`engines.bun`). Earlier releases have known security vulnerabilities in the bundled brotli decoder (GHSA-663w-cv8g-jj2p) and root certificate store (GHSA-26q8-h657-pf84), both reachable through outbound `fetch`, for example remote images in `/_image`. CI now tests Bun 1.4.4 as the oldest supported release.
-- **Breaking:** require Astro 7.3.3 or newer (`peerDependencies.astro: ^7.3.3`). Earlier Astro 7 releases have known security vulnerabilities, including a critical RCE in AVIF image optimization (fixed in 7.2.8), a base-path authorization bypass (fixed in 7.2.4), XSS through unescaped `<script>`/`<style>` content in JSX/MDX (GHSA-98hj-9722-w3j8, fixed in 7.3.2), and CSS injection in View Transitions (GHSA-mpr7-6m5w-76rw, fixed in 7.3.3). CI now tests 7.3.3 as the oldest supported release.
-- **Breaking:** remove native TLS (the `tls` option and `SERVER_CERT_PATH`, `SERVER_KEY_PATH`, `SERVER_CA_PATH`, `SERVER_KEY_PASSPHRASE`). Terminate TLS at a reverse proxy and keep `X-Forwarded-Proto` for the public scheme. Passing `tls` fails the build, and the server refuses to start while those variables are set, so a deployment never falls back to plaintext silently.
-- **Breaking (security):** without `security.allowedDomains`, the `Host` header no longer controls `request.url`; every request uses `localhost:<port>`, matching `@astrojs/node` 11.1.7. List your public domains in `security.allowedDomains` to keep correct `Astro.url` values and `security.checkOrigin` behind a domain (for example Coolify).
-- Add `workers` to run several processes on one port (Linux), in standalone and middleware mode, and `beforeStart` to run modules once before the server starts.
-- **Security:** when `security.allowedDomains` is configured, only a matching `Host` header controls `request.url` (`Astro.url`, redirects, origin checks); any other host is replaced with `localhost:<port>`. Previously the allowlist was ignored and any `Host` reached `Astro.url`. Without `allowedDomains`, behavior is unchanged.
-- **Security:** Astro's `/_image` endpoint fetches local sources from the request origin, which Bun derives from the client's `Host` header, so a forged `Host` made the server send requests, including the client's headers, to an arbitrary host (SSRF). Unless the `Host` matches `security.allowedDomains`, image endpoint requests now load local sources from the server's own listening address, with forwarded origin headers dropped. The image route is taken from Astro's resolved routes. Middleware handlers accept a new `serverPort` context field for that address.
-- Respect `session: false` (Astro 7.2+): the adapter no longer enables filesystem sessions when sessions are explicitly disabled, so Astro can tree-shake the session runtime.
-- Return 404 instead of 500 for unknown parameters on a prerendered dynamic endpoint, matching `@astrojs/node` 11.1.2.
-- Bracket IPv6 hosts in the "Server listening on" message, so `HOST=::1` prints `http://[::1]:4321` instead of an invalid URL.
-- Fix the published types of `@igloczek/astro-bun-adapter/server.js`. They imported the adapter's build-time virtual modules, so `options` and `beforeStart` were `any`, or type errors with `skipLibCheck: false`.
+3. **If you used the `tls` option, terminate TLS at your proxy instead.** Native TLS is gone, together with the `SERVER_CERT_PATH`, `SERVER_KEY_PATH`, `SERVER_CA_PATH` and `SERVER_KEY_PASSPHRASE` variables. A build with `tls` fails, and the server refuses to start while those variables are set, so a site never quietly falls back to plain HTTP.
+4. **In middleware mode, pass `serverPort` to the handler.** It's only needed when your `Bun.serve()` port differs from Astro's `server.port` (4321 by default). Without it, Astro Image can't load your local images.
+
+   ```ts
+   return handler(request, { clientAddress, serverPort: server.port });
+   ```
+
+### New
+
+- **Use every CPU core with `workers`.** `workers: 4` runs four server processes on one port, and a process that crashes is restarted. You can also set the count at deploy time with the `ASTRO_BUN_WORKERS` environment variable. This works on Linux, in standalone and middleware mode. On macOS and Windows the server logs a warning and runs one process.
+- **Run setup code once with `beforeStart`.** Point it at your own modules, for example database migrations or a cache warm-up: `beforeStart: ["./src/migrate.ts"]`. They run in order before the server starts, and only once even with several workers. If a module's default export is a function, the server waits for it to finish.
+
+### Security fixes
+
+- **Forged `Host` headers could make your server request other hosts.** Astro Image loads local images by requesting them from the address in the visitor's `Host` header. A visitor could send a fake `Host` and make your server send requests, with the visitor's headers, to any host they chose. Local images now always load from the server itself, unless the `Host` is listed in `security.allowedDomains`.
+- **`Astro.url` could be set to any domain.** A forged `Host` header became `Astro.url`, and that flowed into redirects and Astro's origin check for forms. Even with `security.allowedDomains` set, the list was ignored. Now only a domain on that list reaches `Astro.url`; any other request sees `localhost`. This matches `@astrojs/node`, and it's why step 2 above is needed.
+
+### Fixes
+
+- `session: false` now really turns sessions off. The adapter used to switch filesystem sessions back on.
+- A prerendered API route with `getStaticPaths()` returns 404 for an unknown path, instead of 500.
+- With an IPv6 `HOST`, the startup log prints a valid address, such as `http://[::1]:4321`.
+- The TypeScript types of `@igloczek/astro-bun-adapter/server.js` resolve. They used to show up as `any`, or as type errors with `skipLibCheck: false`.
 
 ## 0.2.1 - 2026-08-14
 
