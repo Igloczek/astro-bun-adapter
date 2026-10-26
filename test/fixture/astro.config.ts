@@ -19,6 +19,21 @@ export default defineConfig({
         },
       }
     : {}),
+  integrations: [
+    {
+      name: "fixture-renderer",
+      hooks: {
+        "astro:config:setup": ({ addRenderer }) => {
+          addRenderer({
+            name: "fixture-renderer",
+            serverEntrypoint: fileURLToPath(
+              new URL("./src/renderer.ts", import.meta.url),
+            ),
+          });
+        },
+      },
+    },
+  ],
   adapter: bun({
     mode,
     bodySizeLimit: 1024 * 1024,
@@ -43,6 +58,22 @@ export default defineConfig({
   },
   trailingSlash: "never",
   vite: {
+    // One chunk for all of Astro, as an app might configure: the supervisor
+    // must still load none of the app through it.
+    ...(process.env.FIXTURE_VENDOR_CHUNK
+      ? {
+          build: {
+            rolldownOptions: {
+              output: {
+                manualChunks: (id: string) =>
+                  id.includes("/node_modules/astro/")
+                    ? "astro-vendor"
+                    : undefined,
+              },
+            },
+          },
+        }
+      : {}),
     resolve: {
       alias: {
         "@fixture/before-start": fileURLToPath(

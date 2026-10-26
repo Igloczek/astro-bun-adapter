@@ -11,6 +11,7 @@ declare module "virtual:igloczek-astro-bun-adapter:config" {
   export const port: Options["port"];
   export const reusePort: Options["reusePort"];
   export const server: Options["server"];
+  export const shutdownTimeout: Options["shutdownTimeout"];
   export const staticHeaders: Options["staticHeaders"];
   export const trustedProxies: Options["trustedProxies"];
   export const workers: Options["workers"];

@@ -3,10 +3,26 @@ import { fileURLToPath } from "node:url";
 
 import { AstroError } from "astro/errors";
 
+import {
+  DEFAULT_REUSE_PORT,
+  DEFAULT_SHUTDOWN_TIMEOUT,
+  isShutdownTimeout,
+  isWorkerCount,
+  MAX_SHUTDOWN_TIMEOUT,
+  PACKAGE_NAME,
+  TLS_REMOVED_MESSAGE,
+} from "./runtime-env.js";
 import type { Options, UserOptions } from "./types.js";
 
-export const PACKAGE_NAME = "@igloczek/astro-bun-adapter";
-export const DEFAULT_REUSE_PORT = false;
+export {
+  DEFAULT_REUSE_PORT,
+  DEFAULT_SHUTDOWN_TIMEOUT,
+  isShutdownTimeout,
+  isWorkerCount,
+  MAX_SHUTDOWN_TIMEOUT,
+  PACKAGE_NAME,
+  TLS_REMOVED_MESSAGE,
+};
 
 function optionError(message: string): never {
   throw new AstroError(`[${PACKAGE_NAME}] ${message}`);
@@ -39,13 +55,17 @@ export function normalizeIdleTimeout(value: number | undefined) {
   return value;
 }
 
-export function isWorkerCount(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
-}
-
 function validateWorkers(value: unknown) {
   if (value !== undefined && !isWorkerCount(value)) {
     optionError("'workers' must be a positive integer.");
+  }
+}
+
+function validateShutdownTimeout(value: unknown) {
+  if (value !== undefined && !isShutdownTimeout(value)) {
+    optionError(
+      `'shutdownTimeout' must be a number of seconds from 0 through ${MAX_SHUTDOWN_TIMEOUT}.`,
+    );
   }
 }
 
@@ -79,9 +99,6 @@ function normalizeTrustedProxies(value: string[] | undefined) {
   return [...new Set(value)];
 }
 
-export const TLS_REMOVED_MESSAGE =
-  "Native TLS was removed in 1.0.0. Terminate TLS at a reverse proxy (Caddy, Traefik, nginx, a load balancer) and keep `X-Forwarded-Proto` for the public scheme.";
-
 export function normalizeUserOptions(userOptions: UserOptions): UserOptions {
   if (!userOptions || typeof userOptions !== "object") {
     optionError("Adapter options are required.");
@@ -97,6 +114,7 @@ export function normalizeUserOptions(userOptions: UserOptions): UserOptions {
   validateOptionalBoolean("staticHeaders", userOptions.staticHeaders);
   validateOptionalBoolean("reusePort", userOptions.reusePort);
   validateWorkers(userOptions.workers);
+  validateShutdownTimeout(userOptions.shutdownTimeout);
   validateBeforeStart(userOptions.beforeStart);
 
   const bodySizeLimit = normalizeBodySizeLimit(userOptions.bodySizeLimit);
@@ -134,6 +152,7 @@ export function runtimeOptions(
     port: astroConfig.server.port,
     reusePort: userOptions.reusePort ?? DEFAULT_REUSE_PORT,
     server,
+    shutdownTimeout: userOptions.shutdownTimeout ?? DEFAULT_SHUTDOWN_TIMEOUT,
     staticHeaders: userOptions.staticHeaders ?? false,
     trustedProxies: userOptions.trustedProxies ?? [],
     workers: userOptions.workers ?? 1,

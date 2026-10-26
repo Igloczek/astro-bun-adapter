@@ -2,6 +2,18 @@
 
 All notable changes are documented here. This project follows Semantic Versioning.
 
+## 1.1.0 - 2026-10-26
+
+### New
+
+- **Shutdown waits up to 60 seconds for running work, and you can change that with `shutdownTimeout`.** On `SIGTERM` or `SIGINT` (a deploy, `docker stop`, Ctrl+C), the server stops taking new connections, finishes the requests in flight, and lets your app's own `SIGTERM` handlers finish, such as closing a job queue. With `workers`, 1.0 killed everything after 10 seconds; the default is now 60. For longer work, raise it, for example `shutdownTimeout: 170`, or set `ASTRO_BUN_SHUTDOWN_TIMEOUT` at deploy time. Your platform's own stop grace period still applies, so raise it too: `docker stop` waits only 10 seconds by default (`stop_grace_period` in Compose, `kill_timeout` on Fly).
+
+### Fixes
+
+- **With `workers`, your app's code no longer runs in the supervisor.** The supervisor process serves no requests, but it loaded your app: module-level code in a custom `src/fetch.ts` (Astro's advanced routing) or in a renderer ran there once more, starting an extra scheduler or job consumer. Your app now loads only in the workers. `beforeStart` modules still run in the supervisor, once, by design.
+- **`docker stop` no longer waits 10 seconds for a single standalone server.** As the container's main process, it ignored `SIGTERM`, so Docker killed it mid-request. It now shuts down as described above.
+- **A custom server's import of `./dist/server/entry.mjs` is typed.** The build writes `entry.d.mts` next to the entry, so `handler` and `options` get the adapter's types instead of `any` or `{}`.
+
 ## 1.0.0 - 2026-10-25
 
 The first stable release. It adds multi-process workers and a startup hook, closes two security holes around the `Host` header, and drops native TLS. From here on, breaking changes to the options, environment variables and middleware handler documented in the README only come in a new major version.
