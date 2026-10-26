@@ -1,17 +1,15 @@
-import "./watch-supervisor.js";
-
-import { createApp } from "astro/app/entrypoint";
-import { setGetEnv } from "astro/env/setup";
+// Nothing that loads Astro or the app may be imported statically here. A
+// worker must watch its supervisor before the app loads, because app modules
+// can await slow initialization, and a bundler can move any static Astro
+// import into a chunk with the app (e.g. a vendor chunk) that evaluates before
+// this module's body. Astro and the app load below, after the watchdog.
 import * as config from "virtual:igloczek-astro-bun-adapter:config";
 
-import createMiddleware from "./middleware.js";
 import { PACKAGE_NAME } from "./runtime-env.js";
-import { readHeadersJson, resolveOutputDir } from "./shared.js";
-import standalone, { createStandaloneHandler } from "./standalone.js";
-import { isWorker, shutdownTimeout } from "./worker.js";
+import { isWorker, shutdownTimeout, stopWithSupervisor } from "./worker.js";
 import type { Options } from "./types.js";
 
-setGetEnv((key) => process.env[key]);
+if (isWorker) stopWithSupervisor();
 
 const autostart = process.env.ASTRO_BUN_AUTOSTART !== "disabled";
 const stopTimeout = shutdownTimeout(config.shutdownTimeout);
@@ -22,17 +20,8 @@ const options: Options = isWorker
   ? { ...config, reusePort: true }
   : { ...config };
 
-const app = createApp({ streaming: !options.experimentalDisableStreaming });
-const headersMap = options.staticHeaders
-  ? await readHeadersJson(resolveOutputDir(options))
-  : undefined;
-const handler =
-  options.mode === "middleware"
-    ? createMiddleware(app, options)
-    : createStandaloneHandler(app, options, headersMap);
-
-let running: ReturnType<typeof standalone> | undefined;
-const startServer = () => (running ??= standalone(app, options, headersMap));
+const { createAppServer } = await import("./app-server.js");
+const { handler, startServer } = await createAppServer(options);
 
 if (options.mode === "standalone" && autostart) {
   const { stop } = startServer();

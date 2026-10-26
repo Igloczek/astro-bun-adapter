@@ -337,13 +337,19 @@ async function testOrphanedDuringInit() {
       return false;
     }
   };
+  // Bun only balances reusePort connections on Linux, so only it runs two.
+  const expected = process.platform === "linux" ? 2 : 1;
   let pids: number[] = [];
   try {
-    for (let attempt = 0; attempt < 100 && pids.length === 0; attempt += 1) {
+    for (let attempt = 0; attempt < 200 && pids.length < expected; attempt++) {
       await Bun.sleep(50);
       pids = await workerPids();
     }
-    assert.ok(pids.length > 0, "no worker started initializing the app");
+    assert.equal(
+      pids.length,
+      expected,
+      "not every worker started initializing the app",
+    );
     supervisor.kill("SIGKILL");
     await supervisor.exited;
     // One parent check per second, then the 0.1 s deadline.
@@ -990,6 +996,12 @@ try {
     FIXTURE_IMAGE_ROUTE: "/images/index.ts",
   });
   await testResolvedImageRoute();
+
+  await run(["bunx", "astro", "build"], site, {
+    ADAPTER_MODE: "standalone",
+    FIXTURE_VENDOR_CHUNK: "1",
+  });
+  await testOrphanedDuringInit();
 
   console.log(`Integration passed with Astro ${astroVersion}`);
 } finally {

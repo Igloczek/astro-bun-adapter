@@ -54,4 +54,22 @@ export default defineConfig({
     headers: { "x-adapter-preview": "active" },
   },
   trailingSlash: "never",
+  // One chunk for all of Astro, as an app might configure: workers must still
+  // watch their supervisor before the app loads.
+  ...(process.env.FIXTURE_VENDOR_CHUNK
+    ? {
+        vite: {
+          build: {
+            rolldownOptions: {
+              output: {
+                manualChunks: (id: string) =>
+                  id.includes("/node_modules/astro/")
+                    ? "astro-vendor"
+                    : undefined,
+              },
+            },
+          },
+        },
+      }
+    : {}),
 });

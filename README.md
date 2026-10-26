@@ -151,6 +151,8 @@ Use the address the proxy connects from. For a Docker proxy, find it with `docke
 
 The `ASTRO_BUN_SHUTDOWN_TIMEOUT` environment variable overrides `shutdownTimeout` at runtime.
 
+If you set `manualChunks` for the server build, keep this adapter out of a chunk shared with Astro: Rolldown then initializes modules in the wrong order and the server fails to start.
+
 ## Comparison with other Bun adapters
 
 |                                     | **This** | [Nauverse](https://github.com/TheNaubit/astro-bun) | [Wyatt](https://github.com/wyattjoh/astro-bun-adapter) | [Scaliir](https://github.com/ScaliirDigital/root/tree/main/packages/astro-bun) |
