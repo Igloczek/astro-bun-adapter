@@ -10,6 +10,7 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -332,7 +333,15 @@ async function testOrphanedDuringInit() {
   const alive = (pid: number) => {
     try {
       process.kill(pid, 0);
-      return true;
+    } catch {
+      return false;
+    }
+    // Without a reaper (e.g. Docker without --init), an exited worker stays a
+    // zombie, which signal 0 still reaches.
+    if (process.platform !== "linux") return true;
+    try {
+      const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+      return stat.slice(stat.lastIndexOf(")") + 2)[0] !== "Z";
     } catch {
       return false;
     }
