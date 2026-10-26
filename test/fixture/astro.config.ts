@@ -39,9 +39,6 @@ export default defineConfig({
     bodySizeLimit: 1024 * 1024,
     staticHeaders: true,
     trustedProxies: ["127.0.0.1", "::1"],
-    // Only used when the entry starts the server; the runner disables that.
-    workers: 2,
-    beforeStart: ["./src/before-start.ts", "@fixture/before-start"],
   }),
   build: { format: "directory" },
   security: {
@@ -57,11 +54,11 @@ export default defineConfig({
     headers: { "x-adapter-preview": "active" },
   },
   trailingSlash: "never",
-  vite: {
-    // One chunk for all of Astro, as an app might configure: the supervisor
-    // must still load none of the app through it.
-    ...(process.env.FIXTURE_VENDOR_CHUNK
-      ? {
+  // One chunk for all of Astro, as an app might configure: workers must still
+  // watch their supervisor before the app loads.
+  ...(process.env.FIXTURE_VENDOR_CHUNK
+    ? {
+        vite: {
           build: {
             rolldownOptions: {
               output: {
@@ -72,14 +69,7 @@ export default defineConfig({
               },
             },
           },
-        }
-      : {}),
-    resolve: {
-      alias: {
-        "@fixture/before-start": fileURLToPath(
-          new URL("./src/before-start-second.ts", import.meta.url),
-        ),
-      },
-    },
-  },
+        },
+      }
+    : {}),
 });

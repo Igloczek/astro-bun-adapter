@@ -83,6 +83,36 @@ try {
     );
   }
 
+  // Nothing reached here may load Astro or the app: the supervisor module runs
+  // before any worker starts, and the server entry's static imports run
+  // before a worker watches its supervisor (the entry loads Astro with a
+  // dynamic import afterwards).
+  const scanner = new Bun.Transpiler({ loader: "js" });
+  async function assertNoPackages(start: string, followDynamic: boolean) {
+    const reached = new Set<string>();
+    const pending = [start];
+    while (pending.length) {
+      const file = pending.pop()!;
+      if (reached.has(file)) continue;
+      reached.add(file);
+      const source = await readFile(path.join(packageRoot, file), "utf8");
+      for (const { path: specifier, kind } of scanner.scanImports(source)) {
+        if (kind === "dynamic-import" && !followDynamic) continue;
+        if (specifier.startsWith(".")) {
+          pending.push(path.posix.join(path.posix.dirname(file), specifier));
+        } else {
+          assert.ok(
+            specifier.startsWith("node:") ||
+              specifier.startsWith("virtual:igloczek-astro-bun-adapter:"),
+            `${file} imports ${specifier}, reached from ${start} before the app may load`,
+          );
+        }
+      }
+    }
+  }
+  await assertNoPackages("dist/supervisor.js", true);
+  await assertNoPackages("dist/server.js", false);
+
   const manifest = JSON.parse(
     await readFile(path.join(packageRoot, "package.json"), "utf8"),
   ) as { name: string; version: string };

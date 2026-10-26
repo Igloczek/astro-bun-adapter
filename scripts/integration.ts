@@ -10,6 +10,7 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -131,13 +132,8 @@ async function testPreview() {
   assert.equal(response.headers.get("x-adapter-preview"), "active");
   const worker = (await (
     await fetch(`http://127.0.0.1:${port}/api/worker`)
-  ).json()) as { worker: string | null; beforeStart: string | null };
-  assert.equal(worker.worker, null, "preview must not supervise workers");
-  assert.match(
-    worker.beforeStart ?? "",
-    / first second$/,
-    "preview must run beforeStart modules in order",
-  );
+  ).json()) as { worker: string | null };
+  assert.equal(worker.worker, null, "preview must not run as a worker");
   process.kill("SIGTERM");
   assert.ok([0, 143].includes(await process.exited));
 }
@@ -183,6 +179,21 @@ function startWorkers(
   });
 }
 
+/** Starts the fixture's supervisor script, running `script` as each worker. */
+function startSupervisor(
+  script: string,
+  port: number,
+  env: Record<string, string> = {},
+  stderr: "inherit" | "pipe" = "inherit",
+) {
+  return startWorkers(
+    "supervisor.ts",
+    port,
+    { FIXTURE_WORKER_SCRIPT: script, ...env },
+    stderr,
+  );
+}
+
 async function readStderr(process: ReturnType<typeof startWorkers>) {
   const stderr = await new Response(
     process.stderr as ReadableStream<Uint8Array>,
@@ -203,7 +214,7 @@ async function waitForRefused(url: string) {
   throw new Error(`${url} is still served`);
 }
 
-/** Workers evaluate the app's modules; the supervisor, serving nothing, must not. */
+/** Workers evaluate the app's modules; the supervisor script must not. */
 async function assertAppLoadsOnlyInWorkers(supervisorPid: number) {
   const loads = (await readFile(appLog, "utf8")).trim().split("\n");
   for (const module of ["fetch", "renderer"]) {
@@ -218,24 +229,11 @@ async function assertAppLoadsOnlyInWorkers(supervisorPid: number) {
   }
 }
 
-async function testVendorChunkSupervisor() {
-  const port = await reservePort();
-  await writeFile(appLog, "");
-  const supervisor = startWorkers("dist/server/entry.mjs", port);
-  try {
-    await waitFor(`http://127.0.0.1:${port}/api/worker`);
-    await assertAppLoadsOnlyInWorkers(supervisor.pid);
-  } finally {
-    supervisor.kill("SIGKILL");
-    await supervisor.exited;
-  }
-}
-
-async function testWorkers(script: string, drains: boolean) {
+async function testWorkers(script: string, signal: NodeJS.Signals = "SIGTERM") {
   const port = await reservePort();
   const url = `http://127.0.0.1:${port}/api/worker`;
   await writeFile(appLog, "");
-  let supervisor = startWorkers(script, port);
+  let supervisor = startSupervisor(script, port);
   try {
     await waitFor(url);
     // Bun only balances reusePort connections on Linux.
@@ -245,12 +243,12 @@ async function testWorkers(script: string, drains: boolean) {
       const response = await fetch(url, { keepalive: false });
       const body = (await response.json()) as {
         worker: string | null;
-        beforeStart: string | null;
+        setup: string | null;
       };
       assert.equal(
-        body.beforeStart,
-        `${supervisor.pid} first second`,
-        "beforeStart must run once, in the supervisor",
+        body.setup,
+        `${supervisor.pid} setup`,
+        "setup in the supervisor script must run once, before the workers",
       );
       seen.add(String(body.worker));
       attempt += 1;
@@ -259,19 +257,15 @@ async function testWorkers(script: string, drains: boolean) {
     assert.deepEqual([...seen].sort(), expected, "workers did not all serve");
     await assertAppLoadsOnlyInWorkers(supervisor.pid);
 
-    if (drains) {
-      // Headers arrive with the first chunk, once the handler is running.
-      const response = await fetch(`http://127.0.0.1:${port}/api/slow`);
-      assert.equal(response.status, 200);
-      supervisor.kill("SIGTERM");
-      assert.equal(await response.text(), "started finished");
-    } else {
-      supervisor.kill("SIGTERM");
-    }
+    // Headers arrive with the first chunk, once the handler is running.
+    const response = await fetch(`http://127.0.0.1:${port}/api/slow`);
+    assert.equal(response.status, 200);
+    supervisor.kill(signal);
+    assert.equal(await response.text(), "started finished");
     assert.equal(await supervisor.exited, 0);
 
     // Workers stop themselves when their supervisor is killed.
-    supervisor = startWorkers(script, port);
+    supervisor = startSupervisor(script, port);
     await waitFor(url);
     supervisor.kill("SIGKILL");
     await supervisor.exited;
@@ -285,11 +279,10 @@ async function testWorkers(script: string, drains: boolean) {
 async function testSingleProcessShutdown() {
   const port = await reservePort();
   const slow = `http://127.0.0.1:${port}/api/slow`;
-  const env = { ASTRO_BUN_WORKERS: "1" };
 
   // As PID 1 in a container, a process without SIGTERM handlers ignores
   // `docker stop`; the server must drain in-flight requests and exit 0.
-  let server = startWorkers("dist/server/entry.mjs", port, env);
+  let server = startWorkers("dist/server/entry.mjs", port);
   try {
     await waitFor(`http://127.0.0.1:${port}/api/worker`);
     const response = await fetch(slow);
@@ -306,7 +299,7 @@ async function testSingleProcessShutdown() {
   server = startWorkers(
     "dist/server/entry.mjs",
     port,
-    { ...env, ASTRO_BUN_SHUTDOWN_TIMEOUT: "0.1" },
+    { ASTRO_BUN_SHUTDOWN_TIMEOUT: "0.1" },
     "pipe",
   );
   try {
@@ -322,12 +315,72 @@ async function testSingleProcessShutdown() {
   }
 }
 
+async function testOrphanedDuringInit() {
+  // Workers whose app is still initializing must stop when the supervisor
+  // is killed, instead of serving the port with nobody supervising them.
+  const port = await reservePort();
+  await writeFile(appLog, "");
+  const supervisor = startSupervisor("dist/server/entry.mjs", port, {
+    FIXTURE_SLOW_INIT: "1",
+    FIXTURE_SHUTDOWN_TIMEOUT: "0.1",
+  });
+  const workerPids = async () =>
+    (await readFile(appLog, "utf8"))
+      .trim()
+      .split("\n")
+      .filter((line) => line.startsWith("fetch "))
+      .map((line) => Number(line.split(" ")[1]));
+  const alive = (pid: number) => {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return false;
+    }
+    // Without a reaper (e.g. Docker without --init), an exited worker stays a
+    // zombie, which signal 0 still reaches.
+    if (process.platform !== "linux") return true;
+    try {
+      const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+      return stat.slice(stat.lastIndexOf(")") + 2)[0] !== "Z";
+    } catch {
+      return false;
+    }
+  };
+  // Bun only balances reusePort connections on Linux, so only it runs two.
+  const expected = process.platform === "linux" ? 2 : 1;
+  let pids: number[] = [];
+  try {
+    for (let attempt = 0; attempt < 200 && pids.length < expected; attempt++) {
+      await Bun.sleep(50);
+      pids = await workerPids();
+    }
+    assert.equal(
+      pids.length,
+      expected,
+      "not every worker started initializing the app",
+    );
+    supervisor.kill("SIGKILL");
+    await supervisor.exited;
+    // One parent check per second, then the 0.1 s deadline.
+    for (let attempt = 0; attempt < 60 && pids.some(alive); attempt += 1) {
+      await Bun.sleep(50);
+    }
+    assert.ok(
+      !pids.some(alive),
+      "workers must stop when the supervisor dies during app initialization",
+    );
+  } finally {
+    supervisor.kill("SIGKILL");
+    for (const pid of pids) if (alive(pid)) process.kill(pid, "SIGKILL");
+  }
+}
+
 async function testSupervisorShutdownTimeout() {
   const port = await reservePort();
-  const supervisor = startWorkers(
+  const supervisor = startSupervisor(
     "dist/server/entry.mjs",
     port,
-    { ASTRO_BUN_SHUTDOWN_TIMEOUT: "0.1" },
+    { FIXTURE_SHUTDOWN_TIMEOUT: "0.1" },
     "pipe",
   );
   try {
@@ -360,11 +413,11 @@ async function testAppCleanupOnShutdown() {
     const label = `${workers} worker(s), ${JSON.stringify(env)}`;
     const port = await reservePort();
     await writeFile(cleanupLog, "");
-    const server = startWorkers("dist/server/entry.mjs", port, {
-      ASTRO_BUN_WORKERS: workers,
-      FIXTURE_CLEANUP_LOG: cleanupLog,
-      ...env,
-    });
+    const processEnv = { FIXTURE_CLEANUP_LOG: cleanupLog, ...env };
+    const server =
+      workers === "1"
+        ? startWorkers("dist/server/entry.mjs", port, processEnv)
+        : startSupervisor("dist/server/entry.mjs", port, processEnv);
     try {
       await waitFor(`http://127.0.0.1:${port}/api/worker`);
       server.kill("SIGTERM");
@@ -381,33 +434,25 @@ async function testAppCleanupOnShutdown() {
   }
 }
 
-async function testWorkersRejectRemovedTls() {
+async function testRejectRemovedTls() {
   const port = await reservePort();
-  const supervisor = Bun.spawn(
-    ["bun", "--cwd", "site", "dist/server/entry.mjs"],
-    {
-      cwd: temporary,
-      env: {
-        ...Bun.env,
-        HOST: "127.0.0.1",
-        PORT: String(port),
-        SERVER_CERT_PATH: "cert.pem",
-      },
-      stdout: "ignore",
-      stderr: "pipe",
+  const server = Bun.spawn(["bun", "--cwd", "site", "dist/server/entry.mjs"], {
+    cwd: temporary,
+    env: {
+      ...Bun.env,
+      HOST: "127.0.0.1",
+      PORT: String(port),
+      SERVER_CERT_PATH: "cert.pem",
     },
-  );
-  const timeout = setTimeout(() => supervisor.kill("SIGKILL"), 10_000);
-  const exitCode = await supervisor.exited;
+    stdout: "ignore",
+    stderr: "pipe",
+  });
+  const timeout = setTimeout(() => server.kill("SIGKILL"), 10_000);
+  const exitCode = await server.exited;
   clearTimeout(timeout);
-  const stderr = await new Response(supervisor.stderr).text();
+  const stderr = await new Response(server.stderr).text();
   assert.notEqual(exitCode, 0);
   assert.match(stderr, /SERVER_CERT_PATH is set/);
-  assert.doesNotMatch(
-    stderr,
-    /restarting/,
-    "the supervisor must reject removed TLS settings before starting workers",
-  );
 }
 
 async function testEntryTypes() {
@@ -461,30 +506,43 @@ async function testMiddlewareWorkers() {
     path.join(site, "custom-server.ts"),
     `import { handler, options } from "./dist/server/entry.mjs";
 
-Bun.serve({
+const server = Bun.serve({
   hostname: process.env.HOST,
   port: Number(process.env.PORT),
   reusePort: options.reusePort,
   fetch: (request, server) =>
     handler(request, { clientAddress: server.requestIP(request)?.address }),
 });
+let stopping = false;
+const shutdown = () => {
+  if (stopping) return;
+  stopping = true;
+  void server.stop().then(() => process.exit(0));
+};
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
 `,
   );
-  await testWorkers("custom-server.ts", false);
+  await testWorkers("custom-server.ts");
+  await testWorkers("custom-server.ts", "SIGINT");
 
   // The custom server passes no serverPort and listens on PORT, like apps run
   // by portless or Fly, while Astro's server.port is 4321. Untrusted hosts
   // and image sources must still resolve to the port the server listens on.
   const port = await reservePort();
-  const supervisor = startWorkers("custom-server.ts", port);
+  const server = startWorkers("custom-server.ts", port);
   try {
     const baseUrl = `http://127.0.0.1:${port}`;
     await waitFor(`${baseUrl}/api/worker`);
     await assertUntrustedHostIgnored(baseUrl);
     await assertImageIgnoresHost(baseUrl, "/api/pixel.png");
+    const response = await fetch(`${baseUrl}/api/slow`);
+    server.kill("SIGINT");
+    assert.equal(await response.text(), "started finished");
+    assert.equal(await exitCode(server), 0);
   } finally {
-    supervisor.kill("SIGKILL");
-    await supervisor.exited;
+    server.kill("SIGKILL");
+    await server.exited;
   }
 }
 
@@ -666,11 +724,12 @@ async function testStandalone() {
   await symlink("../server/entry.mjs", path.join(built, "client/leak.mjs"));
   await symlink("../server/entry.mjs", path.join(built, "client/leak.svg"));
   await testPreview();
-  await testWorkers("dist/server/entry.mjs", true);
+  await testWorkers("dist/server/entry.mjs");
   await testSingleProcessShutdown();
   await testSupervisorShutdownTimeout();
+  await testOrphanedDuringInit();
   await testAppCleanupOnShutdown();
-  await testWorkersRejectRemovedTls();
+  await testRejectRemovedTls();
 
   const relocated = path.join(site, "relocated-dist");
   await rename(built, relocated);
@@ -951,7 +1010,7 @@ try {
     ADAPTER_MODE: "standalone",
     FIXTURE_VENDOR_CHUNK: "1",
   });
-  await testVendorChunkSupervisor();
+  await testOrphanedDuringInit();
 
   console.log(`Integration passed with Astro ${astroVersion}`);
 } finally {

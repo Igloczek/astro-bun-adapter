@@ -1,68 +1,25 @@
-// Nothing from Astro may be imported statically here: this entry decides
-// first whether the process is a worker supervisor, a supervisor must not run
-// app code, and a bundler can merge any Astro module with the app's (e.g. in
-// a vendor chunk). Astro and the app load after that decision.
-import runBeforeStart from "virtual:igloczek-astro-bun-adapter:before-start";
+// Nothing that loads Astro or the app may be imported statically here. A
+// worker must watch its supervisor before the app loads, because app modules
+// can await slow initialization, and a bundler can move any static Astro
+// import into a chunk with the app (e.g. a vendor chunk) that evaluates before
+// this module's body. Astro and the app load below, after the watchdog.
 import * as config from "virtual:igloczek-astro-bun-adapter:config";
 
-import {
-  PACKAGE_NAME,
-  rejectRemovedTlsEnv,
-  runtimePort,
-} from "./runtime-env.js";
-import { supervise } from "./supervisor.js";
-import {
-  isWatching,
-  isWorker,
-  relaunchCommand,
-  shutdownTimeout,
-  stopWithSupervisor,
-  workerCount,
-} from "./worker.js";
+import { PACKAGE_NAME } from "./runtime-env.js";
+import { isWorker, shutdownTimeout, stopWithSupervisor } from "./worker.js";
 import type { Options } from "./types.js";
 
-// Explicit types keep the virtual modules out of the published declarations.
-const beforeStart: () => Promise<void> = runBeforeStart;
+if (isWorker) stopWithSupervisor();
 
 const autostart = process.env.ASTRO_BUN_AUTOSTART !== "disabled";
 const stopTimeout = shutdownTimeout(config.shutdownTimeout);
-if (isWorker) {
-  stopWithSupervisor(stopTimeout);
-} else if (autostart) {
-  await beforeStart();
-  const workers = workerCount(config.workers);
-  if (workers > 1 && isWatching()) {
-    console.warn(
-      `[${PACKAGE_NAME}] bun --watch and --hot reload this process in place; running 1 process instead of ${workers} workers.`,
-    );
-  } else if (workers > 1) {
-    if (config.mode === "standalone") {
-      // Fail here once, instead of in every worker until the crash limit.
-      rejectRemovedTlsEnv();
-      if (runtimePort(config) === 0) {
-        throw new Error(
-          `[${PACKAGE_NAME}] 'workers' requires a fixed PORT; port 0 gives every worker a different port.`,
-        );
-      }
-    }
-    // This process only supervises: the workers rerun its command, and this
-    // import never resolves, so a custom server's code runs in the workers.
-    await supervise({
-      command: relaunchCommand(),
-      workers,
-      shutdownTimeout: stopTimeout,
-    });
-  }
-}
 
-// Supervised workers share one port, including custom servers that pass
-// `options.reusePort` to Bun.serve().
-const options: Omit<Options, "beforeStart"> = isWorker
+// Processes started by `supervise()` share one port, including custom servers
+// that pass `options.reusePort` to Bun.serve().
+const options: Options = isWorker
   ? { ...config, reusePort: true }
   : { ...config };
 
-const { setGetEnv } = await import("astro/env/setup");
-setGetEnv((key) => process.env[key]);
 const { createAppServer } = await import("./app-server.js");
 const { handler, startServer } = await createAppServer(options);
 
@@ -101,4 +58,4 @@ if (options.mode === "standalone" && autostart) {
   process.prependListener("SIGTERM", drain);
 }
 
-export { beforeStart, handler, options, startServer };
+export { handler, options, startServer };
