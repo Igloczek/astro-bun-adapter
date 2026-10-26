@@ -1,18 +1,16 @@
 // Type-checked against the built package by scripts/package-check.ts. Each
 // `@ts-expect-error` fails the check if the export's type degrades to `any`.
 import bun, {
+  supervise,
   type BunRequestContext,
   type RequestHandler,
+  type SuperviseOptions,
 } from "@igloczek/astro-bun-adapter";
 import {
   handler,
   options,
   startServer,
 } from "@igloczek/astro-bun-adapter/server.js";
-import {
-  supervise,
-  type SuperviseOptions,
-} from "@igloczek/astro-bun-adapter/supervisor";
 
 bun({ mode: "middleware", shutdownTimeout: 30, trustedProxies: ["10.0.0.1"] });
 // @ts-expect-error `mode` is required.

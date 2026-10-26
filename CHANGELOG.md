@@ -2,6 +2,18 @@
 
 All notable changes are documented here. This project follows Semantic Versioning.
 
+## 1.3.0 - 2026-10-26
+
+### Breaking
+
+- **Import `supervise()` from the package itself.** The `@igloczek/astro-bun-adapter/supervisor` path is removed:
+
+  ```ts
+  import { supervise } from "@igloczek/astro-bun-adapter";
+  ```
+
+  Importing it stays cheap: the package now loads Astro only when Astro runs the integration, so your supervisor process doesn't load Astro.
+
 ## 1.2.0 - 2026-10-26
 
 Multiple processes now run from a supervisor script you write, instead of a hidden mode inside the server. Your setup code, your workers and your server's shutdown are all plain code you can read.

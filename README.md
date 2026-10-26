@@ -106,7 +106,7 @@ Run several processes on one port from your own supervisor script. Put one-time 
 
 ```ts
 // supervisor.ts
-import { supervise } from "@igloczek/astro-bun-adapter/supervisor";
+import { supervise } from "@igloczek/astro-bun-adapter";
 
 await supervise({
   command: [process.execPath, "./server.ts"], // or "./dist/server/entry.mjs"
@@ -160,7 +160,7 @@ If you set `manualChunks` for the server build, leave this adapter's modules out
 | Best for                            | SSR apps |                 Static + some SSR                  |                       SSR + ISR                        |                                 SSR + caching                                  |
 | Declared Astro                      | `^7.3.3` |                       `^7.4`                       |                         `^6.3`                         |                                     `^6.3`                                     |
 | Minimum Bun                         |  1.4.4   |                       1.4.3                        |                          1.0                           |                                      1.3                                       |
-| Latest version                      |  1.2.0   |                       0.1.4                        |                         2.1.1                          |                                     0.1.2                                      |
+| Latest version                      |  1.3.0   |                       0.1.4                        |                         2.1.1                          |                                     0.1.2                                      |
 | **Astro features**                  |          |                                                    |                                                        |                                                                                |
 | Astro Image (`/_image`)             |    ✅    |                         ✅                         |                           ✅                           |                                       ✅                                       |
 | Sessions                            |    ✅    |                  ⚠️ needs driver                   |                           ✅                           |                                       ✅                                       |

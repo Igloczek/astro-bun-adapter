@@ -1,4 +1,4 @@
-import { supervise } from "@igloczek/astro-bun-adapter/supervisor";
+import { supervise } from "@igloczek/astro-bun-adapter";
 
 // One-time setup before the workers start, like migrations. Workers inherit
 // the environment, so this shows where it ran.

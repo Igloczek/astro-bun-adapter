@@ -1,6 +1,6 @@
 {
   "name": "@igloczek/astro-bun-adapter",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Run Astro SSR on Bun's native HTTP server",
   "type": "module",
   "license": "MIT",
@@ -25,10 +25,6 @@
     "./server.js": {
       "types": "./dist/server.d.ts",
       "default": "./dist/server.js"
-    },
-    "./supervisor": {
-      "types": "./dist/supervisor.d.ts",
-      "default": "./dist/supervisor.js"
     },
     "./preview.js": {
       "types": "./dist/preview.d.ts",

@@ -83,12 +83,17 @@ try {
     );
   }
 
-  // Nothing reached here may load Astro or the app: the supervisor module runs
-  // before any worker starts, and the server entry's static imports run
-  // before a worker watches its supervisor (the entry loads Astro with a
-  // dynamic import afterwards).
+  // Nothing reached here may load Astro or the app: the main entry's static
+  // imports run in the supervisor process, which lives as long as the
+  // workers, and the server entry's static imports run before a worker
+  // watches its supervisor (the entry loads Astro with a dynamic import
+  // afterwards). `astro/errors` is small and validates the integration's
+  // options.
   const scanner = new Bun.Transpiler({ loader: "js" });
-  async function assertNoPackages(start: string, followDynamic: boolean) {
+  async function assertNoPackages(
+    start: string,
+    allowed: readonly string[] = [],
+  ) {
     const reached = new Set<string>();
     const pending = [start];
     while (pending.length) {
@@ -97,21 +102,22 @@ try {
       reached.add(file);
       const source = await readFile(path.join(packageRoot, file), "utf8");
       for (const { path: specifier, kind } of scanner.scanImports(source)) {
-        if (kind === "dynamic-import" && !followDynamic) continue;
+        if (kind === "dynamic-import") continue;
         if (specifier.startsWith(".")) {
           pending.push(path.posix.join(path.posix.dirname(file), specifier));
         } else {
           assert.ok(
             specifier.startsWith("node:") ||
-              specifier.startsWith("virtual:igloczek-astro-bun-adapter:"),
+              specifier.startsWith("virtual:igloczek-astro-bun-adapter:") ||
+              allowed.includes(specifier),
             `${file} imports ${specifier}, reached from ${start} before the app may load`,
           );
         }
       }
     }
   }
-  await assertNoPackages("dist/supervisor.js", true);
-  await assertNoPackages("dist/server.js", false);
+  await assertNoPackages("dist/index.js", ["astro/errors"]);
+  await assertNoPackages("dist/server.js");
 
   const manifest = JSON.parse(
     await readFile(path.join(packageRoot, "package.json"), "utf8"),

@@ -1,7 +1,6 @@
 // Structurally based on @astrojs/node, MIT licensed by the Astro contributors.
 import { fileURLToPath } from "node:url";
 
-import { sessionDrivers } from "astro/config";
 import type { AstroIntegration } from "astro";
 
 import {
@@ -30,6 +29,7 @@ export type {
   RequestHandler,
   UserOptions,
 };
+export { supervise, type SuperviseOptions } from "./supervisor.js";
 
 export function getAdapter({
   staticHeaders,
@@ -77,6 +77,8 @@ export default function createIntegration(
 
         if (session !== false && !session?.driver) {
           logger.info("Enabling sessions with filesystem storage");
+          // Loaded here so importing `supervise()` stays cheap.
+          const { sessionDrivers } = await import("astro/config");
           session = {
             driver: sessionDrivers.fsLite({
               base: fileURLToPath(new URL("sessions", astroConfig.cacheDir)),
