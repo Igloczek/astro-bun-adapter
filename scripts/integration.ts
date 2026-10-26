@@ -314,6 +314,52 @@ async function testSingleProcessShutdown() {
   }
 }
 
+async function testOrphanedDuringInit() {
+  // Workers whose app is still initializing must stop when the supervisor
+  // is killed, instead of serving the port with nobody supervising them.
+  const port = await reservePort();
+  await writeFile(appLog, "");
+  const supervisor = startSupervisor("dist/server/entry.mjs", port, {
+    FIXTURE_SLOW_INIT: "1",
+    FIXTURE_SHUTDOWN_TIMEOUT: "0.1",
+  });
+  const workerPids = async () =>
+    (await readFile(appLog, "utf8"))
+      .trim()
+      .split("\n")
+      .filter((line) => line.startsWith("fetch "))
+      .map((line) => Number(line.split(" ")[1]));
+  const alive = (pid: number) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  let pids: number[] = [];
+  try {
+    for (let attempt = 0; attempt < 100 && pids.length === 0; attempt += 1) {
+      await Bun.sleep(50);
+      pids = await workerPids();
+    }
+    assert.ok(pids.length > 0, "no worker started initializing the app");
+    supervisor.kill("SIGKILL");
+    await supervisor.exited;
+    // One parent check per second, then the 0.1 s deadline.
+    for (let attempt = 0; attempt < 60 && pids.some(alive); attempt += 1) {
+      await Bun.sleep(50);
+    }
+    assert.ok(
+      !pids.some(alive),
+      "workers must stop when the supervisor dies during app initialization",
+    );
+  } finally {
+    supervisor.kill("SIGKILL");
+    for (const pid of pids) if (alive(pid)) process.kill(pid, "SIGKILL");
+  }
+}
+
 async function testSupervisorShutdownTimeout() {
   const port = await reservePort();
   const supervisor = startSupervisor(
@@ -666,6 +712,7 @@ async function testStandalone() {
   await testWorkers("dist/server/entry.mjs");
   await testSingleProcessShutdown();
   await testSupervisorShutdownTimeout();
+  await testOrphanedDuringInit();
   await testAppCleanupOnShutdown();
   await testRejectRemovedTls();
 

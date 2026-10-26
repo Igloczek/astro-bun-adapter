@@ -1,3 +1,5 @@
+import "./watch-supervisor.js";
+
 import { createApp } from "astro/app/entrypoint";
 import { setGetEnv } from "astro/env/setup";
 import * as config from "virtual:igloczek-astro-bun-adapter:config";
@@ -6,14 +8,13 @@ import createMiddleware from "./middleware.js";
 import { PACKAGE_NAME } from "./runtime-env.js";
 import { readHeadersJson, resolveOutputDir } from "./shared.js";
 import standalone, { createStandaloneHandler } from "./standalone.js";
-import { isWorker, shutdownTimeout, stopWithSupervisor } from "./worker.js";
+import { isWorker, shutdownTimeout } from "./worker.js";
 import type { Options } from "./types.js";
 
 setGetEnv((key) => process.env[key]);
 
 const autostart = process.env.ASTRO_BUN_AUTOSTART !== "disabled";
 const stopTimeout = shutdownTimeout(config.shutdownTimeout);
-if (isWorker) stopWithSupervisor(stopTimeout);
 
 // Processes started by `supervise()` share one port, including custom servers
 // that pass `options.reusePort` to Bun.serve().

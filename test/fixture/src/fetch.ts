@@ -6,6 +6,10 @@ import { logAppModule } from "./app-log";
 
 logAppModule("fetch");
 
+// Slow async initialization, like connecting to a database: a worker must
+// still notice a lost supervisor while it waits.
+if (process.env.FIXTURE_SLOW_INIT) await Bun.sleep(10_000);
+
 // App-owned cleanup on shutdown, like closing a job queue: the server must
 // let it finish instead of exiting once HTTP requests are drained.
 // `once` listeners remove themselves before they run, and an exit code the
