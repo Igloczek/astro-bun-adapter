@@ -28,7 +28,7 @@ Multiple processes now run from a supervisor script you write, instead of a hidd
 
 ### Clarified
 
-- **A custom server owns its shutdown.** In middleware mode, your `Bun.serve()` finishes in-flight requests only if your `server.ts` handles `SIGTERM`; the README shows the two lines. 1.1.0's shutdown handling, and the `shutdownTimeout` option, apply to the standalone server.
+- **A custom server owns its shutdown.** In middleware mode, your `Bun.serve()` finishes in-flight requests only if your `server.ts` handles the shutdown signal; the README shows handlers for `SIGTERM` and `SIGINT`. 1.1.0's shutdown handling, and the `shutdownTimeout` option, apply to the standalone server.
 
 ## 1.1.0 - 2026-10-26
 

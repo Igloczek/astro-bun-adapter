@@ -65,4 +65,37 @@ stopWithSupervisor(0.2);
         "ignored SIGTERM",
       );
     }));
+
+  test("uses the supervisor deadline after supervisor loss", () =>
+    withDirectory(async (directory) => {
+      const script = path.join(directory, "worker.ts");
+      await Bun.write(
+        script,
+        `import { stopWithSupervisor } from ${JSON.stringify(workerModule)};
+process.on("SIGTERM", () => console.log("ignored SIGTERM"));
+setInterval(() => {}, 1000);
+stopWithSupervisor(60);
+`,
+      );
+      const worker = Bun.spawn([process.execPath, script], {
+        env: {
+          ...process.env,
+          ASTRO_BUN_SUPERVISOR_PID: "999999",
+          ASTRO_BUN_SUPERVISOR_SHUTDOWN_TIMEOUT: "0.1",
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const timeout = setTimeout(() => worker.kill("SIGKILL"), 2000);
+      try {
+        expect(await worker.exited).toBe(1);
+        expect(await new Response(worker.stdout).text()).toContain(
+          "ignored SIGTERM",
+        );
+      } finally {
+        clearTimeout(timeout);
+        worker.kill("SIGKILL");
+        await worker.exited;
+      }
+    }));
 });

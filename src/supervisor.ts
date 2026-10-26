@@ -3,11 +3,12 @@ import {
   isShutdownTimeout,
   MAX_SHUTDOWN_TIMEOUT,
   PACKAGE_NAME,
+  SUPERVISOR_SHUTDOWN_TIMEOUT_ENV,
 } from "./runtime-env.js";
 
 export interface SuperviseOptions {
   /**
-   * Command that starts one worker, such as
+   * Command that starts the worker process directly, such as
    * `[process.execPath, "./server.ts"]` for a custom server or
    * `[process.execPath, "./dist/server/entry.mjs"]` for the standalone server.
    */
@@ -119,6 +120,7 @@ async function run({
           ...process.env,
           [WORKER_ENV]: String(index),
           [SUPERVISOR_ENV]: String(process.pid),
+          [SUPERVISOR_SHUTDOWN_TIMEOUT_ENV]: String(shutdownTimeout),
         },
         stdin: "ignore",
         stdout: "inherit",

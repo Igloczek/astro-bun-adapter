@@ -228,7 +228,7 @@ async function assertAppLoadsOnlyInWorkers(supervisorPid: number) {
   }
 }
 
-async function testWorkers(script: string, drains: boolean) {
+async function testWorkers(script: string, signal: NodeJS.Signals = "SIGTERM") {
   const port = await reservePort();
   const url = `http://127.0.0.1:${port}/api/worker`;
   await writeFile(appLog, "");
@@ -256,15 +256,11 @@ async function testWorkers(script: string, drains: boolean) {
     assert.deepEqual([...seen].sort(), expected, "workers did not all serve");
     await assertAppLoadsOnlyInWorkers(supervisor.pid);
 
-    if (drains) {
-      // Headers arrive with the first chunk, once the handler is running.
-      const response = await fetch(`http://127.0.0.1:${port}/api/slow`);
-      assert.equal(response.status, 200);
-      supervisor.kill("SIGTERM");
-      assert.equal(await response.text(), "started finished");
-    } else {
-      supervisor.kill("SIGTERM");
-    }
+    // Headers arrive with the first chunk, once the handler is running.
+    const response = await fetch(`http://127.0.0.1:${port}/api/slow`);
+    assert.equal(response.status, 200);
+    supervisor.kill(signal);
+    assert.equal(await response.text(), "started finished");
     assert.equal(await supervisor.exited, 0);
 
     // Workers stop themselves when their supervisor is killed.
@@ -449,16 +445,25 @@ async function testMiddlewareWorkers() {
     path.join(site, "custom-server.ts"),
     `import { handler, options } from "./dist/server/entry.mjs";
 
-Bun.serve({
+const server = Bun.serve({
   hostname: process.env.HOST,
   port: Number(process.env.PORT),
   reusePort: options.reusePort,
   fetch: (request, server) =>
     handler(request, { clientAddress: server.requestIP(request)?.address }),
 });
+let stopping = false;
+const shutdown = () => {
+  if (stopping) return;
+  stopping = true;
+  void server.stop().then(() => process.exit(0));
+};
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
 `,
   );
-  await testWorkers("custom-server.ts", false);
+  await testWorkers("custom-server.ts");
+  await testWorkers("custom-server.ts", "SIGINT");
 
   // The custom server passes no serverPort and listens on PORT, like apps run
   // by portless or Fly, while Astro's server.port is 4321. Untrusted hosts
@@ -470,6 +475,10 @@ Bun.serve({
     await waitFor(`${baseUrl}/api/worker`);
     await assertUntrustedHostIgnored(baseUrl);
     await assertImageIgnoresHost(baseUrl, "/api/pixel.png");
+    const response = await fetch(`${baseUrl}/api/slow`);
+    server.kill("SIGINT");
+    assert.equal(await response.text(), "started finished");
+    assert.equal(await exitCode(server), 0);
   } finally {
     server.kill("SIGKILL");
     await server.exited;
@@ -654,7 +663,7 @@ async function testStandalone() {
   await symlink("../server/entry.mjs", path.join(built, "client/leak.mjs"));
   await symlink("../server/entry.mjs", path.join(built, "client/leak.svg"));
   await testPreview();
-  await testWorkers("dist/server/entry.mjs", true);
+  await testWorkers("dist/server/entry.mjs");
   await testSingleProcessShutdown();
   await testSupervisorShutdownTimeout();
   await testAppCleanupOnShutdown();

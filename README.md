@@ -90,7 +90,14 @@ const server = Bun.serve({
 });
 
 // Your server also owns shutdown: finish in-flight requests, then exit.
-process.on("SIGTERM", () => server.stop().then(() => process.exit(0)));
+let stopping = false;
+const shutdown = () => {
+  if (stopping) return;
+  stopping = true;
+  void server.stop().then(() => process.exit(0));
+};
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
 ```
 
 ## Multiple processes
@@ -107,7 +114,7 @@ await supervise({
 });
 ```
 
-Start it with `bun ./supervisor.ts`. It starts `workers` copies of `command` (Linux only; one elsewhere), restarts any that exit, forwards `SIGTERM` and `SIGINT` to them, and kills those still running after `shutdownTimeout` seconds (default `60`). Each worker finishes its own requests: the standalone server does that itself, and a custom server needs a `SIGTERM` handler like the one above. Workers share the port through `options.reusePort`, which is `true` in every process `supervise()` starts.
+Start it with `bun ./supervisor.ts`. Give `command` the server executable and its arguments directly: the supervisor signals its direct children, and workers monitor their parent. It starts `workers` copies of `command` (Linux only; one elsewhere), restarts any that exit, forwards `SIGTERM` and `SIGINT` to them, and kills those still running after `shutdownTimeout` seconds (default `60`). Each worker finishes its own requests: the standalone server does that itself, and a custom server needs `SIGTERM` and `SIGINT` handlers like those above. Workers share the port through `options.reusePort`, which is `true` in every process `supervise()` starts.
 
 ## Behind a reverse proxy
 

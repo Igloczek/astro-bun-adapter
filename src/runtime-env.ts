@@ -5,6 +5,9 @@ import type { Options } from "./types.js";
 
 export const PACKAGE_NAME = "@igloczek/astro-bun-adapter";
 export const DEFAULT_REUSE_PORT = false;
+/** Internal deadline inherited by workers for cleanup after supervisor loss. */
+export const SUPERVISOR_SHUTDOWN_TIMEOUT_ENV =
+  "ASTRO_BUN_SUPERVISOR_SHUTDOWN_TIMEOUT";
 /** Seconds a stopping server gets to finish in-flight requests. */
 export const DEFAULT_SHUTDOWN_TIMEOUT = 60;
 /** The longest delay a timer supports (2^31 - 1 ms), in whole seconds. */
@@ -16,9 +19,6 @@ export function isShutdownTimeout(value: unknown): value is number {
   );
 }
 
-export function isWorkerCount(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
-}
 export const TLS_REMOVED_MESSAGE =
   "Native TLS was removed in 1.0.0. Terminate TLS at a reverse proxy (Caddy, Traefik, nginx, a load balancer) and keep `X-Forwarded-Proto` for the public scheme.";
 

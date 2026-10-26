@@ -3,6 +3,7 @@ import {
   isShutdownTimeout,
   MAX_SHUTDOWN_TIMEOUT,
   PACKAGE_NAME,
+  SUPERVISOR_SHUTDOWN_TIMEOUT_ENV,
 } from "./runtime-env.js";
 import { SUPERVISOR_ENV, WORKER_ENV } from "./supervisor.js";
 
@@ -28,6 +29,15 @@ export function shutdownTimeout(configured: number) {
  * forced to exit after the shutdown timeout the supervisor would enforce.
  */
 export function stopWithSupervisor(timeout = DEFAULT_SHUTDOWN_TIMEOUT) {
+  const inheritedTimeout = process.env[SUPERVISOR_SHUTDOWN_TIMEOUT_ENV];
+  if (inheritedTimeout !== undefined) {
+    timeout = Number(inheritedTimeout);
+    if (!isShutdownTimeout(timeout)) {
+      throw new Error(
+        `[${PACKAGE_NAME}] Invalid inherited supervisor shutdown timeout.`,
+      );
+    }
+  }
   const supervisor = Number(process.env[SUPERVISOR_ENV]) || process.ppid;
   const check = () => {
     if (process.ppid === supervisor) return;

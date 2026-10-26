@@ -37,6 +37,7 @@ process.on("SIGTERM", () => {
 // Exit with a supervisor that the test failed to stop.
 const supervisor = process.ppid;
 setInterval(() => process.ppid !== supervisor && process.exit(1), 200);
+console.log("timeout " + process.env.ASTRO_BUN_SUPERVISOR_SHUTDOWN_TIMEOUT);
 console.log("started " + index);
 `,
   );
@@ -121,6 +122,7 @@ describe("supervise", () => {
       Array.from({ length: workers }, (_, index) => `started ${index}`),
     );
 
+    expect(supervisor.lines).toContain("timeout 60");
     supervisor.child.kill("SIGTERM");
     expect((await supervisor.finish()).exitCode).toBe(0);
     expect(
@@ -170,6 +172,7 @@ describe("supervise", () => {
     const { exitCode, stderr } = await supervisor.finish();
     expect(exitCode).toBe(0);
     expect(stderr).toContain("did not stop within 0.2s; killing them.");
+    expect(supervisor.lines).toContain("timeout 0.2");
   });
 
   test("kills workers on a second signal", async () => {
