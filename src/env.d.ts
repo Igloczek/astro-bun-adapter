@@ -14,10 +14,4 @@ declare module "virtual:igloczek-astro-bun-adapter:config" {
   export const shutdownTimeout: Options["shutdownTimeout"];
   export const staticHeaders: Options["staticHeaders"];
   export const trustedProxies: Options["trustedProxies"];
-  export const workers: Options["workers"];
-}
-
-declare module "virtual:igloczek-astro-bun-adapter:before-start" {
-  /** Runs the configured `beforeStart` modules in order. */
-  export default function beforeStart(): Promise<void>;
 }

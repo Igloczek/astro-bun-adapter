@@ -7,7 +7,7 @@ import { PACKAGE_NAME } from "./config.js";
  * `dist/server/entry.mjs` directly, and TypeScript would otherwise infer its
  * exports from the bundled JavaScript.
  */
-export const ENTRY_DECLARATION = `export { beforeStart, handler, options, startServer } from "${PACKAGE_NAME}/server.js";\n`;
+export const ENTRY_DECLARATION = `export { handler, options, startServer } from "${PACKAGE_NAME}/server.js";\n`;
 
 /** `entry.mjs` → `entry.d.mts`; undefined for a non-JavaScript file name. */
 export function entryDeclarationName(serverEntry: string) {

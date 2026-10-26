@@ -17,6 +17,7 @@
   <a href="#install">Install</a> ·
   <a href="#standalone-server">Standalone</a> ·
   <a href="#middleware">Middleware</a> ·
+  <a href="#multiple-processes">Multiple processes</a> ·
   <a href="#options">Options</a> ·
   <a href="#comparison-with-other-bun-adapters">Compare adapters</a>
 </p>
@@ -77,16 +78,36 @@ adapter: bun({ mode: "middleware" });
 
 ```ts
 // server.ts
-import { handler } from "./dist/server/entry.mjs";
+import { handler, options } from "./dist/server/entry.mjs";
 
-Bun.serve({
+const server = Bun.serve({
   port: 3000,
+  reusePort: options.reusePort,
   fetch(request, server) {
     const clientAddress = server.requestIP(request)?.address;
     return handler(request, { clientAddress, serverPort: server.port });
   },
 });
+
+// Your server also owns shutdown: finish in-flight requests, then exit.
+process.on("SIGTERM", () => server.stop().then(() => process.exit(0)));
 ```
+
+## Multiple processes
+
+Run several processes on one port from your own supervisor script. Put one-time setup, such as migrations, before `supervise()`: it runs once, and your app loads only in the workers.
+
+```ts
+// supervisor.ts
+import { supervise } from "@igloczek/astro-bun-adapter/supervisor";
+
+await supervise({
+  command: [process.execPath, "./server.ts"], // or "./dist/server/entry.mjs"
+  workers: 2,
+});
+```
+
+Start it with `bun ./supervisor.ts`. It starts `workers` copies of `command` (Linux only; one elsewhere), restarts any that exit, forwards `SIGTERM` and `SIGINT` to them, and kills those still running after `shutdownTimeout` seconds (default `60`). Each worker finishes its own requests: the standalone server does that itself, and a custom server needs a `SIGTERM` handler like the one above. Workers share the port through `options.reusePort`, which is `true` in every process `supervise()` starts.
 
 ## Behind a reverse proxy
 
@@ -110,22 +131,18 @@ Use the address the proxy connects from. For a Docker proxy, find it with `docke
 
 ## Options
 
-| Option                         | Default     | Purpose                                                    |
-| ------------------------------ | ----------- | ---------------------------------------------------------- |
-| `mode`                         | required    | `standalone` or `middleware`                               |
-| `workers`                      | `1`         | Server processes on one port (Linux); crashed ones restart |
-| `beforeStart`                  | none        | Modules to run once before the server starts               |
-| `shutdownTimeout`              | `60`        | Seconds to finish in-flight requests on SIGTERM/SIGINT     |
-| `reusePort`                    | `false`     | Allow multiple Bun processes on one port                   |
-| `bodySizeLimit`                | Bun default | Maximum request body bytes                                 |
-| `idleTimeout`                  | `10`        | Seconds before an idle connection closes                   |
-| `trustedProxies`               | `[]`        | Proxy IPs trusted for `X-Forwarded-For` client addresses   |
-| `staticHeaders`                | `false`     | Serve Astro-generated CSP headers for prerendered files    |
-| `experimentalDisableStreaming` | `false`     | Disable Astro HTML streaming                               |
+| Option                         | Default     | Purpose                                                  |
+| ------------------------------ | ----------- | -------------------------------------------------------- |
+| `mode`                         | required    | `standalone` or `middleware`                             |
+| `shutdownTimeout`              | `60`        | Seconds the standalone server gets to finish on SIGTERM  |
+| `reusePort`                    | `false`     | Allow multiple Bun processes on one port                 |
+| `bodySizeLimit`                | Bun default | Maximum request body bytes                               |
+| `idleTimeout`                  | `10`        | Seconds before an idle connection closes                 |
+| `trustedProxies`               | `[]`        | Proxy IPs trusted for `X-Forwarded-For` client addresses |
+| `staticHeaders`                | `false`     | Serve Astro-generated CSP headers for prerendered files  |
+| `experimentalDisableStreaming` | `false`     | Disable Astro HTML streaming                             |
 
-The `ASTRO_BUN_WORKERS` and `ASTRO_BUN_SHUTDOWN_TIMEOUT` environment variables override `workers` and `shutdownTimeout` at runtime.
-
-With `workers`, only `beforeStart` and what it imports run in the supervisor; your app loads in the workers. If you set `manualChunks` for the server build, keep this adapter out of a chunk shared with Astro: Rolldown then initializes modules in the wrong order and the server fails to start.
+The `ASTRO_BUN_SHUTDOWN_TIMEOUT` environment variable overrides `shutdownTimeout` at runtime.
 
 ## Comparison with other Bun adapters
 
@@ -134,7 +151,7 @@ With `workers`, only `beforeStart` and what it imports run in the supervisor; yo
 | Best for                            | SSR apps |                 Static + some SSR                  |                       SSR + ISR                        |                                 SSR + caching                                  |
 | Declared Astro                      | `^7.3.3` |                       `^7.4`                       |                         `^6.3`                         |                                     `^6.3`                                     |
 | Minimum Bun                         |  1.4.4   |                       1.4.3                        |                          1.0                           |                                      1.3                                       |
-| Latest version                      |  1.1.0   |                       0.1.4                        |                         2.1.1                          |                                     0.1.2                                      |
+| Latest version                      |  1.2.0   |                       0.1.4                        |                         2.1.1                          |                                     0.1.2                                      |
 | **Astro features**                  |          |                                                    |                                                        |                                                                                |
 | Astro Image (`/_image`)             |    ✅    |                         ✅                         |                           ✅                           |                                       ✅                                       |
 | Sessions                            |    ✅    |                  ⚠️ needs driver                   |                           ✅                           |                                       ✅                                       |
@@ -156,7 +173,7 @@ With `workers`, only `beforeStart` and what it imports run in the supervisor; yo
 | `reusePort` (Linux)                 |    ✅    |                         ✅                         |                           ❌                           |                                       ❌                                       |
 | Multi-process workers               |    ✅    |                         ✅                         |                           ❌                           |                                       ❌                                       |
 | Workers with your own `Bun.serve()` |    ✅    |                         ❌                         |                           ❌                           |                                       ❌                                       |
-| Setup before start (`beforeStart`)  |    ✅    |                         ❌                         |                           ❌                           |                                       ❌                                       |
+| Setup before workers start          |    ✅    |                         ❌                         |                           ❌                           |                                       ❌                                       |
 | Zero dependencies                   |    ✅    |                         ✅                         |                           ❌                           |                                       ✅                                       |
 | Known security issues               |    0     |                         0                          |                           1                            |                                       2                                        |
 | License                             |   MIT    |                        MIT                         |                          MIT                           |                                     BSD-3                                      |

@@ -18,26 +18,14 @@ export interface UserOptions {
   /** Allows multiple Bun processes to accept connections on the same port. */
   reusePort?: boolean;
   /**
-   * Server processes to run on one port. Above `1`, the process that starts
-   * the server supervises that many workers with `reusePort` (Linux only).
-   * `ASTRO_BUN_WORKERS` overrides it at runtime.
-   */
-  workers?: number;
-  /**
-   * Modules to run once, in order, before the server or its workers start:
-   * paths relative to the project root, or any specifier Vite resolves. A
-   * default export function is awaited.
-   */
-  beforeStart?: string | string[];
-  /**
-   * Seconds a stopping server gets after `SIGTERM` or `SIGINT` to finish
-   * in-flight requests and the app's own signal handlers before it is
-   * killed. Fractions are allowed; `0` kills it at once. Without other
-   * listeners for the signal, the process exits as soon as requests finish;
-   * with any, it waits to exit by itself, which open connections nothing
-   * closes delay until the timeout. Applies when the
-   * adapter starts the server: the standalone server and every `workers`
-   * setup. A custom server, or `startServer()`, handles its own signals.
+   * Seconds the standalone server gets after `SIGTERM` or `SIGINT` to finish
+   * in-flight requests and the app's own signal handlers before it exits.
+   * Fractions are allowed; `0` exits at once. Without other listeners for
+   * the signal, the process exits as soon as requests finish; with any, it
+   * waits to exit by itself, which open connections nothing closes delay
+   * until the timeout. Only the standalone server started by the entry uses
+   * it: a custom server, or `startServer()`, handles its own signals, and
+   * processes started by `supervise()` get the supervisor's deadline.
    * `ASTRO_BUN_SHUTDOWN_TIMEOUT` overrides it at runtime. Defaults to `60`.
    */
   shutdownTimeout?: number;
@@ -64,10 +52,7 @@ export interface Options extends UserOptions {
   server: string;
   staticHeaders: boolean;
   trustedProxies: string[];
-  workers: number;
   shutdownTimeout: number;
-  /** Resolved `beforeStart` specifiers; not exposed to the runtime. */
-  beforeStart?: string[];
 }
 
 export interface BunRequestContext {

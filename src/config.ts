@@ -1,5 +1,4 @@
 import { isIP } from "node:net";
-import { fileURLToPath } from "node:url";
 
 import { AstroError } from "astro/errors";
 
@@ -7,7 +6,6 @@ import {
   DEFAULT_REUSE_PORT,
   DEFAULT_SHUTDOWN_TIMEOUT,
   isShutdownTimeout,
-  isWorkerCount,
   MAX_SHUTDOWN_TIMEOUT,
   PACKAGE_NAME,
   TLS_REMOVED_MESSAGE,
@@ -18,7 +16,6 @@ export {
   DEFAULT_REUSE_PORT,
   DEFAULT_SHUTDOWN_TIMEOUT,
   isShutdownTimeout,
-  isWorkerCount,
   MAX_SHUTDOWN_TIMEOUT,
   PACKAGE_NAME,
   TLS_REMOVED_MESSAGE,
@@ -55,38 +52,12 @@ export function normalizeIdleTimeout(value: number | undefined) {
   return value;
 }
 
-function validateWorkers(value: unknown) {
-  if (value !== undefined && !isWorkerCount(value)) {
-    optionError("'workers' must be a positive integer.");
-  }
-}
-
 function validateShutdownTimeout(value: unknown) {
   if (value !== undefined && !isShutdownTimeout(value)) {
     optionError(
       `'shutdownTimeout' must be a number of seconds from 0 through ${MAX_SHUTDOWN_TIMEOUT}.`,
     );
   }
-}
-
-function validateBeforeStart(value: unknown) {
-  const modules = Array.isArray(value) ? value : [value];
-  if (
-    value !== undefined &&
-    modules.some((module) => typeof module !== "string" || module === "")
-  ) {
-    optionError(
-      "'beforeStart' must be a module specifier or an array of them.",
-    );
-  }
-}
-
-function resolveModule(specifier: string, root: URL) {
-  // Relative paths, with either slash, are from the project root; Vite
-  // resolves the rest.
-  return /^\.\.?[\\/]/.test(specifier)
-    ? fileURLToPath(new URL(specifier.replaceAll("\\", "/"), root))
-    : specifier;
 }
 
 function normalizeTrustedProxies(value: string[] | undefined) {
@@ -113,14 +84,19 @@ export function normalizeUserOptions(userOptions: UserOptions): UserOptions {
   );
   validateOptionalBoolean("staticHeaders", userOptions.staticHeaders);
   validateOptionalBoolean("reusePort", userOptions.reusePort);
-  validateWorkers(userOptions.workers);
   validateShutdownTimeout(userOptions.shutdownTimeout);
-  validateBeforeStart(userOptions.beforeStart);
 
   const bodySizeLimit = normalizeBodySizeLimit(userOptions.bodySizeLimit);
   const idleTimeout = normalizeIdleTimeout(userOptions.idleTimeout);
   if ("tls" in userOptions)
     optionError(`'tls' is no longer supported. ${TLS_REMOVED_MESSAGE}`);
+  for (const name of ["workers", "beforeStart"]) {
+    if (name in userOptions) {
+      optionError(
+        `'${name}' was removed in 1.2.0. Start several processes, and run setup before them, from your own supervisor script with \`supervise()\` from "${PACKAGE_NAME}/supervisor".`,
+      );
+    }
+  }
   return {
     ...userOptions,
     ...(bodySizeLimit === undefined ? {} : { bodySizeLimit }),
@@ -139,12 +115,8 @@ export function runtimeOptions(
     optionError("Astro did not provide build.client and build.server URLs.");
   }
 
-  const { beforeStart, ...rest } = userOptions;
   return {
-    ...rest,
-    beforeStart: [beforeStart ?? []]
-      .flat()
-      .map((module) => resolveModule(module, astroConfig.root)),
+    ...userOptions,
     client,
     experimentalDisableStreaming:
       userOptions.experimentalDisableStreaming ?? false,
@@ -155,6 +127,5 @@ export function runtimeOptions(
     shutdownTimeout: userOptions.shutdownTimeout ?? DEFAULT_SHUTDOWN_TIMEOUT,
     staticHeaders: userOptions.staticHeaders ?? false,
     trustedProxies: userOptions.trustedProxies ?? [],
-    workers: userOptions.workers ?? 1,
   };
 }

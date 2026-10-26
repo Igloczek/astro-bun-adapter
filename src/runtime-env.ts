@@ -1,6 +1,6 @@
-// Values and environment checks the worker supervisor needs. The supervisor
-// must not load the app, and a bundler can merge any Astro module with app
-// code (e.g. a vendor chunk), so this module imports nothing from Astro.
+// Values and environment checks shared with the public supervisor module,
+// which runs in a process that must not load Astro or the app: this module
+// imports nothing from Astro.
 import type { Options } from "./types.js";
 
 export const PACKAGE_NAME = "@igloczek/astro-bun-adapter";

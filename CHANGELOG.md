@@ -2,6 +2,34 @@
 
 All notable changes are documented here. This project follows Semantic Versioning.
 
+## 1.2.0 - 2026-10-26
+
+Multiple processes now run from a supervisor script you write, instead of a hidden mode inside the server. Your setup code, your workers and your server's shutdown are all plain code you can read.
+
+### Breaking
+
+- **`workers`, `beforeStart` and `ASTRO_BUN_WORKERS` are removed.** Importing `dist/server/entry.mjs` no longer turns a process into a supervisor. Instead, write a `supervisor.ts`, put one-time setup (what `beforeStart` ran) before `supervise()`, and start the container with `bun ./supervisor.ts`:
+
+  ```ts
+  import { supervise } from "@igloczek/astro-bun-adapter/supervisor";
+
+  await runMigrations(); // was beforeStart
+  await supervise({
+    command: [process.execPath, "./server.ts"], // or "./dist/server/entry.mjs"
+    workers: Number(process.env.WORKERS ?? 2), // was workers / ASTRO_BUN_WORKERS
+  });
+  ```
+
+  The build fails with a pointer to `supervise()` while `workers` or `beforeStart` is set.
+
+### New
+
+- **`supervise()` from `@igloczek/astro-bun-adapter/supervisor`.** It starts that many copies of your command on one port (Linux; one elsewhere), restarts any that exit, forwards `SIGTERM` and `SIGINT`, and kills workers still running after `shutdownTimeout` seconds (default 60). It imports nothing from Astro or your app, so the supervisor process stays small and runs only your script.
+
+### Clarified
+
+- **A custom server owns its shutdown.** In middleware mode, your `Bun.serve()` finishes in-flight requests only if your `server.ts` handles `SIGTERM`; the README shows the two lines. 1.1.0's shutdown handling, and the `shutdownTimeout` option, apply to the standalone server.
+
 ## 1.1.0 - 2026-10-26
 
 ### New

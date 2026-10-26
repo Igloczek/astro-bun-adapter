@@ -41,14 +41,11 @@ describe("adapter options", () => {
         tls: { certPath: "cert.pem", keyPath: "key.pem" },
       } as never),
     ).toThrow("'tls' is no longer supported. Native TLS was removed in 1.0.0.");
-    for (const workers of [0, 1.5, "2"]) {
+    for (const removed of ["workers", "beforeStart"]) {
       expect(() =>
-        normalizeUserOptions({ mode: "standalone", workers } as never),
-      ).toThrow("'workers' must be a positive integer");
+        normalizeUserOptions({ mode: "standalone", [removed]: 2 } as never),
+      ).toThrow(`'${removed}' was removed in 1.2.0`);
     }
-    expect(normalizeUserOptions({ mode: "middleware", workers: 2 })).toEqual(
-      expect.objectContaining({ workers: 2 }),
-    );
     for (const shutdownTimeout of [-1, Number.NaN, Infinity, 2_147_484, "10"]) {
       expect(() =>
         normalizeUserOptions({ mode: "standalone", shutdownTimeout } as never),
@@ -59,42 +56,17 @@ describe("adapter options", () => {
     expect(
       normalizeUserOptions({ mode: "middleware", shutdownTimeout: 0.5 }),
     ).toEqual(expect.objectContaining({ shutdownTimeout: 0.5 }));
-    for (const beforeStart of ["", 1, ["./ok.ts", ""]]) {
-      expect(() =>
-        normalizeUserOptions({ mode: "standalone", beforeStart } as never),
-      ).toThrow("beforeStart");
-    }
   });
 
-  test("resolves relative beforeStart modules against the project root", () => {
-    const options = runtimeOptions(
-      {
-        mode: "standalone",
-        beforeStart: [
-          "./src/before-start.ts",
-          "@shared/setup",
-          "../x.ts",
-          ".\\src\\windows.ts",
-          "..\\y.ts",
-        ],
+  test("defaults the shutdown timeout to 60 seconds", () => {
+    const options = runtimeOptions({ mode: "standalone" }, {
+      root: new URL("file:///project/"),
+      build: {
+        client: new URL("file:///project/dist/client/"),
+        server: new URL("file:///project/dist/server/"),
       },
-      {
-        root: new URL("file:///project/"),
-        build: {
-          client: new URL("file:///project/dist/client/"),
-          server: new URL("file:///project/dist/server/"),
-        },
-        server: { host: false, port: 4321 },
-      } as never,
-    );
-    expect(options.beforeStart).toEqual([
-      "/project/src/before-start.ts",
-      "@shared/setup",
-      "/x.ts",
-      "/project/src/windows.ts",
-      "/y.ts",
-    ]);
-    expect(options.workers).toBe(1);
+      server: { host: false, port: 4321 },
+    } as never);
     expect(options.shutdownTimeout).toBe(60);
   });
 });

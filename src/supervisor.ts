@@ -6,9 +6,18 @@ import {
 } from "./runtime-env.js";
 
 export interface SuperviseOptions {
-  /** Command that starts one worker. */
+  /**
+   * Command that starts one worker, such as
+   * `[process.execPath, "./server.ts"]` for a custom server or
+   * `[process.execPath, "./dist/server/entry.mjs"]` for the standalone server.
+   */
   command: string[];
-  /** Number of workers. Each one must listen with `reusePort: true`. */
+  /**
+   * Number of workers. Each listens with `reusePort: true`: the standalone
+   * server does that itself, and a custom server passes `options.reusePort`
+   * from the entry to `Bun.serve()`. Above `1` on Linux only; other
+   * platforms start one worker.
+   */
   workers: number;
   /**
    * Seconds workers get to exit after `SIGINT` or `SIGTERM` before they are
@@ -164,10 +173,21 @@ async function run({
 
 /**
  * Runs `workers` copies of `command` on one port and exits when they stop.
+ * Call it from your own supervisor script, after any one-time setup:
+ *
+ * ```ts
+ * import { supervise } from "@igloczek/astro-bun-adapter/supervisor";
+ *
+ * await runMigrations();
+ * await supervise({ command: [process.execPath, "./server.ts"], workers: 2 });
+ * ```
+ *
  * Workers that exit are restarted, unless workers exit more than
  * `3 × workers` times within a minute. `SIGINT` and `SIGTERM` are forwarded to
  * every worker; workers still running after `shutdownTimeout`, or when a
- * second signal arrives, are killed.
+ * second signal arrives, are killed. Each worker's own server decides how to
+ * finish its requests on that signal. This module imports nothing from Astro
+ * or your app.
  */
 export async function supervise(options: SuperviseOptions): Promise<never> {
   process.exit(await run(options));

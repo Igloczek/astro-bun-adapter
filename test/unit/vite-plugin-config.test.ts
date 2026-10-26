@@ -24,17 +24,17 @@ describe("generated config modules", () => {
     expect(toLiteral(undefined)).toBe("undefined");
   });
 
-  test("beforeStart specifiers are embedded as escaped literals", () => {
+  test("config values are embedded as escaped literals", () => {
     const plugin = createConfigPlugin({
-      beforeStart: [`./${unsafe}.ts`],
+      client: `file:///${unsafe}/`,
     } as Options) as {
       load: { handler: (id: string) => string };
     };
     const code = plugin.load.handler(
-      "\0virtual:igloczek-astro-bun-adapter:before-start",
+      "\0virtual:igloczek-astro-bun-adapter:config",
     );
     expect(code).not.toContain("</script>");
     expect(code).not.toMatch(new RegExp(`[${separators}]`));
-    expect(code).toContain(toLiteral(`./${unsafe}.ts`));
+    expect(code).toContain(toLiteral(`file:///${unsafe}/`));
   });
 });

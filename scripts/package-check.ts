@@ -83,6 +83,28 @@ try {
     );
   }
 
+  // A supervisor script imports the supervisor module before any worker
+  // starts, so nothing it reaches may load Astro or the app.
+  const scanner = new Bun.Transpiler({ loader: "js" });
+  const reached = new Set<string>();
+  const pending = ["dist/supervisor.js"];
+  while (pending.length) {
+    const file = pending.pop()!;
+    if (reached.has(file)) continue;
+    reached.add(file);
+    const source = await readFile(path.join(packageRoot, file), "utf8");
+    for (const { path: specifier } of scanner.scanImports(source)) {
+      if (specifier.startsWith(".")) {
+        pending.push(path.posix.join(path.posix.dirname(file), specifier));
+      } else {
+        assert.ok(
+          specifier.startsWith("node:"),
+          `${file} imports ${specifier}; the supervisor must not load packages`,
+        );
+      }
+    }
+  }
+
   const manifest = JSON.parse(
     await readFile(path.join(packageRoot, "package.json"), "utf8"),
   ) as { name: string; version: string };
