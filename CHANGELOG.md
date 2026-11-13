@@ -2,6 +2,12 @@
 
 All notable changes are documented here. This project follows Semantic Versioning.
 
+## 1.2.1 - 2026-11-13
+
+### Fixed
+
+- **Listed in the [Astro integrations library](https://astro.build/integrations/).** The package now has the `astro-integration` and `withastro` keywords the library searches npm for, so it appears under Adapters. Thanks to @jesseagleboy for pointing this out (#56).
+
 ## 1.2.0 - 2026-10-26
 
 Multiple processes now run from a supervisor script you write, instead of a hidden mode inside the server. Your setup code, your workers and your server's shutdown are all plain code you can read.
