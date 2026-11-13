@@ -2,16 +2,25 @@ import { expect, test } from "bun:test";
 
 // Dependabot's lockfile updates have dropped the `libc` field from Linux
 // native packages, so Bun installs both the glibc and the musl build.
-test("bun.lock keeps libc on musl-only native packages", async () => {
-  const lockfile = await Bun.file(
-    new URL("../../bun.lock", import.meta.url),
-  ).text();
-  const musl = lockfile
+const lockfile = await Bun.file(
+  new URL("../../bun.lock", import.meta.url),
+).text();
+
+function missingLibc(name: RegExp, libc: string) {
+  const entries = lockfile
     .split("\n")
-    .filter((line) => /^\s+"[^"]*(-musl|linuxmusl-[^"]*)": \["/.test(line));
-  expect(musl.length).toBeGreaterThan(0);
-  const missing = musl
-    .filter((line) => !line.includes('"libc": "musl"'))
+    .filter((line) => name.test(line.trim().split('"')[1] ?? ""));
+  expect(entries.length).toBeGreaterThan(0);
+  return entries
+    .filter((line) => !line.includes(`"libc": "${libc}"`))
     .map((line) => line.trim().split('"')[1]);
-  expect(missing).toEqual([]);
+}
+
+// Arm hard-float builds (`-gnueabihf`, `-musleabihf`) declare no libc.
+test("bun.lock keeps libc on musl-only native packages", () => {
+  expect(missingLibc(/(-musl|linuxmusl-.*)$/, "musl")).toEqual([]);
+});
+
+test("bun.lock keeps libc on glibc-only native packages", () => {
+  expect(missingLibc(/-gnu$/, "glibc")).toEqual([]);
 });
