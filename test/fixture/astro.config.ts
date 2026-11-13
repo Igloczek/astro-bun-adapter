@@ -7,6 +7,9 @@ const mode =
   process.env.ADAPTER_MODE === "middleware" ? "middleware" : "standalone";
 
 const imageRoute = process.env.FIXTURE_IMAGE_ROUTE;
+// Astro's own image endpoints, e.g. astro/assets/endpoint/node, which apps
+// can opt into instead of the adapter's default.
+const imageEntrypoint = process.env.FIXTURE_IMAGE_ENTRYPOINT;
 
 export default defineConfig({
   output: "server",
@@ -18,7 +21,9 @@ export default defineConfig({
           service: { entrypoint: "./src/image-service.ts" },
         },
       }
-    : {}),
+    : imageEntrypoint
+      ? { image: { endpoint: { entrypoint: imageEntrypoint } } }
+      : {}),
   integrations: [
     {
       name: "fixture-renderer",
