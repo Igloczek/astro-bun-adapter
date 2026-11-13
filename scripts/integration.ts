@@ -10,7 +10,7 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -965,8 +965,12 @@ async function assertImageCaseVariantContained(
   assert.notEqual(variantName, name);
   const variant = path.join(path.dirname(outDir), variantName);
   if (existsSync(variant)) {
-    // The output directory itself, reached through a case-insensitive path.
-    assert.notEqual(process.platform, "linux", `${variant} already exists`);
+    // On a case-insensitive filesystem, the name reaches the output itself.
+    assert.equal(
+      statSync(variant).ino,
+      statSync(outDir).ino,
+      `${variant} already exists`,
+    );
     console.log("Skipping the case-variant /_image check: case-insensitive.");
     return;
   }
