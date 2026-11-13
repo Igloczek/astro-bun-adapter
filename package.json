@@ -57,11 +57,11 @@
     "prepack": "bun run build"
   },
   "peerDependencies": {
-    "astro": "^7.3.3"
+    "astro": "^7.4.7"
   },
   "devDependencies": {
     "@types/bun": "1.4.4",
-    "astro": "7.4.5",
+    "astro": "7.4.12",
     "oxlint": "1.90.0",
     "prettier": "3.9.10",
     "typescript": "7.0.2"

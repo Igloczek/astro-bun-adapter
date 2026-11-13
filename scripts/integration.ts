@@ -10,7 +10,7 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -857,6 +857,11 @@ async function testStandalone() {
     await assertImageLoads(runner.baseUrl, "/api/pixel.png");
     await assertImageIgnoresHost(runner.baseUrl, "/api/pixel.png");
     await assertImageSymlinkContained(runner.baseUrl, "/leak.svg");
+    await assertImageCaseVariantContained(
+      runner.baseUrl,
+      relocated,
+      path.join(relocated, "client"),
+    );
 
     response = await fetch(`${runner.baseUrl}/session`);
     assert.equal(response.status, 200);
@@ -948,6 +953,46 @@ async function assertImageSymlinkContained(baseUrl: string, href: string) {
   const body = await response.text();
   assert.notEqual(response.status, 200, "/_image followed a symlink out");
   assert.doesNotMatch(body, /startServer/, "/_image leaked server code");
+}
+
+/**
+ * GHSA-r3h5-4585-7x3w: a directory next to the build output whose name
+ * differs only by letter case must stay out of reach of /_image. Only a
+ * case-sensitive filesystem (Linux) has such a sibling.
+ */
+async function assertImageCaseVariantContained(
+  baseUrl: string,
+  outDir: string,
+  clientDir: string,
+) {
+  const name = path.basename(outDir);
+  const variant = path.join(path.dirname(outDir), name.toUpperCase());
+  if (existsSync(variant)) return;
+  await mkdir(path.join(variant, "client"), { recursive: true });
+  const pixel = (await hashedPixelHref(clientDir)).slice(1);
+  await cp(
+    path.join(clientDir, pixel),
+    path.join(variant, "client/secret.png"),
+  );
+  try {
+    const up = "../".repeat(pixel.split("/").length + 1);
+    for (const href of [
+      `/../../${name.toUpperCase()}/client/secret.png`,
+      `/${up}${name.toUpperCase()}/client/secret.png`,
+      `/%2e%2e/%2e%2e/${name.toUpperCase()}/client/secret.png`,
+    ]) {
+      const query = new URLSearchParams({ href, w: "1", h: "1", f: "png" });
+      const response = await fetch(`${baseUrl}/_image?${query}`);
+      await response.arrayBuffer();
+      assert.notEqual(
+        response.status,
+        200,
+        `/_image served a case-variant sibling of the output: ${href}`,
+      );
+    }
+  } finally {
+    await rm(variant, { recursive: true, force: true });
+  }
 }
 
 async function testBasePathImages(base: string) {
