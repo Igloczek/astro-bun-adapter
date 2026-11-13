@@ -51,7 +51,7 @@ const drain = (signal: NodeJS.Signals) => {
   if (!isWorker) {
     setTimeout(() => {
       console.error(
-        `[${PACKAGE_NAME}] Server did not stop within ${stopTimeout}s; exiting.`,
+        `[${PACKAGE_NAME}] ${stopServer ? "Server" : "App"} did not stop within ${stopTimeout}s; exiting.`,
       );
       process.exit(1);
     }, stopTimeout * 1000).unref();
