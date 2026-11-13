@@ -2,6 +2,17 @@
 
 All notable changes are documented here. This project follows Semantic Versioning.
 
+## 1.3.0 - 2026-11-13
+
+### Breaking
+
+- **Astro 7.4.7 or newer is required.** Astro releases up to 7.4.6 have [GHSA-r3h5-4585-7x3w](https://github.com/withastro/astro/security/advisories/GHSA-r3h5-4585-7x3w): on case-sensitive filesystems such as Linux, Astro's `node` image endpoint served images from a directory next to the build output whose name differs only by letter case (for example `DIST/client` next to `dist/client`). This adapter's default image endpoint was not affected; apps that set `image.endpoint.entrypoint` to `astro/assets/endpoint/node` were. Update Astro, then the adapter (#62).
+- **Node.js 22.23.4 or newer**, matching what Astro 7.4.7 requires (#62).
+
+### Fixed
+
+- **A stop signal during startup now stops the server.** If `SIGTERM` or `SIGINT` arrived while the app was still loading, after the app had registered its own handler, the app's handler ran but the server then started anyway and kept serving. A supervised worker kept serving until the supervisor killed it, and a single process until something killed it. Now the app's cleanup runs and the server never starts. A signal that arrives before the app has registered any handler exits at once with the signal's status (143 for `SIGTERM`, 130 for `SIGINT`), including as PID 1 in a container, where `docker stop` would otherwise be ignored (#61).
+
 ## 1.2.1 - 2026-11-13
 
 ### Fixed
