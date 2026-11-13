@@ -3,6 +3,8 @@
 // can await slow initialization, and a bundler can move any static Astro
 // import into a chunk with the app (e.g. a vendor chunk) that evaluates before
 // this module's body. Astro and the app load below, after the watchdog.
+import { constants } from "node:os";
+
 import * as config from "virtual:igloczek-astro-bun-adapter:config";
 
 import { PACKAGE_NAME } from "./runtime-env.js";
@@ -23,16 +25,6 @@ const options: Options = isWorker
 const standalone = options.mode === "standalone" && autostart;
 let stopServer: (() => Promise<void>) | undefined;
 let stopping = false;
-let appHandlesSignal = false;
-
-const finishStopping = () => {
-  void (stopServer?.() ?? Promise.resolve()).then(() => {
-    // An app that handles the signal too owns the rest of its cleanup, so
-    // the process exits once that finishes, within the timeout. Otherwise
-    // nothing is left to wait for, open connections included.
-    if (!appHandlesSignal) process.exit(process.exitCode ?? 0);
-  });
-};
 
 // Drain in-flight requests on SIGINT or SIGTERM. Without handlers, PID 1 in a
 // container ignores `docker stop`. The supervisor kills workers that hang,
@@ -48,14 +40,12 @@ const drain = (signal: NodeJS.Signals) => {
   }
   // Decided before any app listener runs: `once` listeners remove
   // themselves, and the adapter's handler runs first (prepended).
-  appHandlesSignal = process.listenerCount(signal) > 1;
+  const appHandlesSignal = process.listenerCount(signal) > 1;
   if (!stopServer && !appHandlesSignal) {
-    // Still loading, with nothing to drain and nobody else to notify: die by
-    // the signal, as the process would without this handler.
-    process.off("SIGINT", drain);
-    process.off("SIGTERM", drain);
-    process.kill(process.pid, signal);
-    return;
+    // Still loading, with nothing to drain and nobody else to notify. Exit
+    // with the signal's status rather than re-raising it: PID 1 in a
+    // container ignores a signal it has no handler for.
+    process.exit(128 + constants.signals[signal]);
   }
   stopping = true;
   if (!isWorker) {
@@ -66,8 +56,14 @@ const drain = (signal: NodeJS.Signals) => {
       process.exit(1);
     }, stopTimeout * 1000).unref();
   }
-  // While the app is still loading, it finishes stopping once loaded.
-  if (stopServer) finishStopping();
+  // While the app is still loading, the server never starts (below), and
+  // the process exits once the app's own handler and loading finish.
+  void stopServer?.().then(() => {
+    // An app that handles the signal too owns the rest of its cleanup, so
+    // the process exits once that finishes, within the timeout. Otherwise
+    // nothing is left to wait for, open connections included.
+    if (!appHandlesSignal) process.exit(process.exitCode ?? 0);
+  });
 };
 if (standalone) {
   process.prependListener("SIGINT", drain);
@@ -77,13 +73,7 @@ if (standalone) {
 const { createAppServer } = await import("./app-server.js");
 const { handler, startServer } = await createAppServer(options);
 
-if (standalone) {
-  if (stopping) {
-    // A signal arrived while the app was loading: never start serving.
-    finishStopping();
-  } else {
-    stopServer = startServer().stop;
-  }
-}
+// A signal that arrived while the app was loading means never serving.
+if (standalone && !stopping) stopServer = startServer().stop;
 
 export { handler, options, startServer };

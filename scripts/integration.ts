@@ -434,32 +434,95 @@ async function testAppCleanupOnShutdown() {
   }
 }
 
+/** Records whether `url` ever answers until `process` exits. */
+function watchServed(url: string, process: { exited: Promise<number> }) {
+  let exited = false;
+  void process.exited.then(() => (exited = true));
+  return (async () => {
+    while (!exited) {
+      try {
+        await (await fetch(url, { keepalive: false })).arrayBuffer();
+        return true;
+      } catch {
+        await Bun.sleep(50);
+      }
+    }
+    return false;
+  })();
+}
+
+async function countLines(file: string, line: string) {
+  return (await readFile(file, "utf8"))
+    .split("\n")
+    .filter((entry) => entry === line).length;
+}
+
 async function testSignalDuringStartup() {
   // SIGTERM after the app registered its own handler, but before the server
   // started: the app's cleanup must run and the process exit without ever
-  // serving, alone and as a supervised worker.
-  for (const workers of ["1", "2"]) {
+  // serving, as a single process and as supervised workers.
+  for (const supervised of [false, true]) {
+    const label = supervised ? "supervised workers" : "single process";
     const port = await reservePort();
     await writeFile(cleanupLog, "");
     const env = { FIXTURE_CLEANUP_LOG: cleanupLog, FIXTURE_SLOW_START: "2000" };
-    const server =
-      workers === "1"
-        ? startWorkers("dist/server/entry.mjs", port, env)
-        : startSupervisor("dist/server/entry.mjs", port, env);
+    const server = supervised
+      ? startSupervisor("dist/server/entry.mjs", port, env)
+      : startWorkers("dist/server/entry.mjs", port, env);
     try {
-      const expected = workers === "1" || process.platform !== "linux" ? 1 : 2;
+      // Bun only balances reusePort connections on Linux, so only it runs two.
+      const expected = supervised && process.platform === "linux" ? 2 : 1;
       for (let attempt = 0; attempt < 200; attempt += 1) {
-        const log = await readFile(cleanupLog, "utf8");
-        if (log.split("registered").length > expected) break;
+        if ((await countLines(cleanupLog, "registered")) >= expected) break;
         await Bun.sleep(25);
       }
+      assert.equal(await countLines(cleanupLog, "registered"), expected, label);
+      const served = watchServed(`http://127.0.0.1:${port}/api/worker`, server);
       server.kill("SIGTERM");
-      assert.equal(await exitCode(server), 0, `${workers} worker(s)`);
-      assert.match(
-        await readFile(cleanupLog, "utf8"),
-        /cleaned up/,
-        `the app's SIGTERM cleanup must finish during startup: ${workers} worker(s)`,
+      assert.equal(await exitCode(server), 0, label);
+      assert.equal(
+        await served,
+        false,
+        `the server must never serve: ${label}`,
       );
+      assert.equal(
+        await countLines(cleanupLog, "cleaned up"),
+        expected,
+        `the app's SIGTERM cleanup must finish during startup: ${label}`,
+      );
+    } finally {
+      server.kill("SIGKILL");
+      await server.exited;
+    }
+  }
+
+  // A signal before the app registered any handler ends the process with the
+  // signal's status at once, instead of waiting for the app to load. It must
+  // not rely on the signal's default action, which PID 1 ignores.
+  for (const [signal, code] of [
+    ["SIGTERM", 143],
+    ["SIGINT", 130],
+  ] as const) {
+    const port = await reservePort();
+    await writeFile(appLog, "");
+    const server = startWorkers("dist/server/entry.mjs", port, {
+      FIXTURE_SLOW_INIT: "1",
+    });
+    try {
+      for (let attempt = 0; attempt < 200; attempt += 1) {
+        if ((await readFile(appLog, "utf8")).includes(`fetch ${server.pid}`)) {
+          break;
+        }
+        await Bun.sleep(25);
+      }
+      assert.match(
+        await readFile(appLog, "utf8"),
+        new RegExp(`fetch ${server.pid}`),
+        "the app did not start loading",
+      );
+      server.kill(signal);
+      // The fixture's initialization takes 10 s.
+      assert.equal(await exitCode(server, 5_000), code, signal);
     } finally {
       server.kill("SIGKILL");
       await server.exited;
