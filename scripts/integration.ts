@@ -857,11 +857,7 @@ async function testStandalone() {
     await assertImageLoads(runner.baseUrl, "/api/pixel.png");
     await assertImageIgnoresHost(runner.baseUrl, "/api/pixel.png");
     await assertImageSymlinkContained(runner.baseUrl, "/leak.svg");
-    await assertImageCaseVariantContained(
-      runner.baseUrl,
-      relocated,
-      path.join(relocated, "client"),
-    );
+    await assertImageCaseVariantContained(runner.baseUrl, relocated);
 
     response = await fetch(`${runner.baseUrl}/session`);
     assert.equal(response.status, 200);
@@ -958,40 +954,58 @@ async function assertImageSymlinkContained(baseUrl: string, href: string) {
 /**
  * GHSA-r3h5-4585-7x3w: a directory next to the build output whose name
  * differs only by letter case must stay out of reach of /_image. Only a
- * case-sensitive filesystem (Linux) has such a sibling.
+ * case-sensitive filesystem has such a sibling; Linux (CI) must run it.
  */
 async function assertImageCaseVariantContained(
   baseUrl: string,
   outDir: string,
-  clientDir: string,
 ) {
   const name = path.basename(outDir);
-  const variant = path.join(path.dirname(outDir), name.toUpperCase());
-  if (existsSync(variant)) return;
+  const variantName = name.toUpperCase();
+  assert.notEqual(variantName, name);
+  const variant = path.join(path.dirname(outDir), variantName);
+  if (existsSync(variant)) {
+    // The output directory itself, reached through a case-insensitive path.
+    assert.notEqual(process.platform, "linux", `${variant} already exists`);
+    console.log("Skipping the case-variant /_image check: case-insensitive.");
+    return;
+  }
+  const clientDir = path.join(outDir, "client");
   await mkdir(path.join(variant, "client"), { recursive: true });
-  const pixel = (await hashedPixelHref(clientDir)).slice(1);
   await cp(
-    path.join(clientDir, pixel),
+    path.join(clientDir, (await hashedPixelHref(clientDir)).slice(1)),
     path.join(variant, "client/secret.png"),
   );
   try {
-    const up = "../".repeat(pixel.split("/").length + 1);
     for (const href of [
-      `/../../${name.toUpperCase()}/client/secret.png`,
-      `/${up}${name.toUpperCase()}/client/secret.png`,
-      `/%2e%2e/%2e%2e/${name.toUpperCase()}/client/secret.png`,
+      `/../../${variantName}/client/secret.png`,
+      `/%2e%2e/%2e%2e/${variantName}/client/secret.png`,
     ]) {
       const query = new URLSearchParams({ href, w: "1", h: "1", f: "png" });
       const response = await fetch(`${baseUrl}/_image?${query}`);
       await response.arrayBuffer();
-      assert.notEqual(
-        response.status,
-        200,
-        `/_image served a case-variant sibling of the output: ${href}`,
+      assert.ok(
+        [400, 404].includes(response.status),
+        `/_image must refuse a case-variant sibling of the output, got ${response.status}: ${href}`,
       );
     }
   } finally {
     await rm(variant, { recursive: true, force: true });
+  }
+}
+
+async function testNodeImageEndpoint() {
+  // An app that opts into Astro's node endpoint reads local images from disk.
+  const runner = await startRunner("standalone", "dist/server/entry.mjs");
+  try {
+    const href = await hashedPixelHref(path.join(site, "dist/client"));
+    await assertImageLoads(runner.baseUrl, href);
+    await assertImageCaseVariantContained(
+      runner.baseUrl,
+      path.join(site, "dist"),
+    );
+  } finally {
+    await runner.stop();
   }
 }
 
@@ -1153,6 +1167,12 @@ try {
     FIXTURE_VENDOR_CHUNK: "1",
   });
   await testOrphanedDuringInit();
+
+  await run(["bunx", "astro", "build"], site, {
+    ADAPTER_MODE: "standalone",
+    FIXTURE_IMAGE_ENTRYPOINT: "astro/assets/endpoint/node",
+  });
+  await testNodeImageEndpoint();
 
   console.log(`Integration passed with Astro ${astroVersion}`);
 } finally {
