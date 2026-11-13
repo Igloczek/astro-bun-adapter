@@ -20,42 +20,70 @@ const options: Options = isWorker
   ? { ...config, reusePort: true }
   : { ...config };
 
+const standalone = options.mode === "standalone" && autostart;
+let stopServer: (() => Promise<void>) | undefined;
+let stopping = false;
+let appHandlesSignal = false;
+
+const finishStopping = () => {
+  void (stopServer?.() ?? Promise.resolve()).then(() => {
+    // An app that handles the signal too owns the rest of its cleanup, so
+    // the process exits once that finishes, within the timeout. Otherwise
+    // nothing is left to wait for, open connections included.
+    if (!appHandlesSignal) process.exit(process.exitCode ?? 0);
+  });
+};
+
+// Drain in-flight requests on SIGINT or SIGTERM. Without handlers, PID 1 in a
+// container ignores `docker stop`. The supervisor kills workers that hang,
+// and a terminal's Ctrl+C reaches workers twice, so only a process without a
+// supervisor enforces the timeout and treats a repeat as a kill.
+// Registered before the app loads: an app module can register its own
+// handler and then await slow initialization, and a signal in that gap must
+// still stop the server instead of letting it start afterwards.
+const drain = (signal: NodeJS.Signals) => {
+  if (stopping) {
+    if (!isWorker) process.exit(1);
+    return;
+  }
+  // Decided before any app listener runs: `once` listeners remove
+  // themselves, and the adapter's handler runs first (prepended).
+  appHandlesSignal = process.listenerCount(signal) > 1;
+  if (!stopServer && !appHandlesSignal) {
+    // Still loading, with nothing to drain and nobody else to notify: die by
+    // the signal, as the process would without this handler.
+    process.off("SIGINT", drain);
+    process.off("SIGTERM", drain);
+    process.kill(process.pid, signal);
+    return;
+  }
+  stopping = true;
+  if (!isWorker) {
+    setTimeout(() => {
+      console.error(
+        `[${PACKAGE_NAME}] Server did not stop within ${stopTimeout}s; exiting.`,
+      );
+      process.exit(1);
+    }, stopTimeout * 1000).unref();
+  }
+  // While the app is still loading, it finishes stopping once loaded.
+  if (stopServer) finishStopping();
+};
+if (standalone) {
+  process.prependListener("SIGINT", drain);
+  process.prependListener("SIGTERM", drain);
+}
+
 const { createAppServer } = await import("./app-server.js");
 const { handler, startServer } = await createAppServer(options);
 
-if (options.mode === "standalone" && autostart) {
-  const { stop } = startServer();
-  // Drain in-flight requests on SIGINT or SIGTERM. Without handlers, PID 1 in
-  // a container ignores `docker stop`. The supervisor kills workers that
-  // hang, and a terminal's Ctrl+C reaches workers twice, so only a process
-  // without a supervisor enforces the timeout and treats a repeat as a kill.
-  let stopping = false;
-  const drain = (signal: NodeJS.Signals) => {
-    if (stopping) {
-      if (!isWorker) process.exit(1);
-      return;
-    }
-    // Decided before any app listener runs: `once` listeners remove
-    // themselves, and the adapter's handler runs first (prepended).
-    const appHandlesSignal = process.listenerCount(signal) > 1;
-    stopping = true;
-    if (!isWorker) {
-      setTimeout(() => {
-        console.error(
-          `[${PACKAGE_NAME}] Server did not stop within ${stopTimeout}s; exiting.`,
-        );
-        process.exit(1);
-      }, stopTimeout * 1000).unref();
-    }
-    void stop().then(() => {
-      // An app that handles the signal too owns the rest of its cleanup, so
-      // the process exits once that finishes, within the timeout. Otherwise
-      // nothing is left to wait for, open connections included.
-      if (!appHandlesSignal) process.exit(process.exitCode ?? 0);
-    });
-  };
-  process.prependListener("SIGINT", drain);
-  process.prependListener("SIGTERM", drain);
+if (standalone) {
+  if (stopping) {
+    // A signal arrived while the app was loading: never start serving.
+    finishStopping();
+  } else {
+    stopServer = startServer().stop;
+  }
 }
 
 export { handler, options, startServer };

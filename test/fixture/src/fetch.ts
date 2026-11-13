@@ -24,6 +24,12 @@ if (cleanupLog) {
       process.exitCode = Number(process.env.FIXTURE_CLEANUP_EXIT_CODE);
     }
   });
+  // Slow initialization after the cleanup handler is registered: a signal
+  // in this gap must still stop the server, which must not start afterwards.
+  if (process.env.FIXTURE_SLOW_START) {
+    appendFileSync(cleanupLog, "registered\n");
+    await Bun.sleep(Number(process.env.FIXTURE_SLOW_START));
+  }
 }
 
 export default new DefaultFetchHandler();

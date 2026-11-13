@@ -434,6 +434,39 @@ async function testAppCleanupOnShutdown() {
   }
 }
 
+async function testSignalDuringStartup() {
+  // SIGTERM after the app registered its own handler, but before the server
+  // started: the app's cleanup must run and the process exit without ever
+  // serving, alone and as a supervised worker.
+  for (const workers of ["1", "2"]) {
+    const port = await reservePort();
+    await writeFile(cleanupLog, "");
+    const env = { FIXTURE_CLEANUP_LOG: cleanupLog, FIXTURE_SLOW_START: "2000" };
+    const server =
+      workers === "1"
+        ? startWorkers("dist/server/entry.mjs", port, env)
+        : startSupervisor("dist/server/entry.mjs", port, env);
+    try {
+      const expected = workers === "1" || process.platform !== "linux" ? 1 : 2;
+      for (let attempt = 0; attempt < 200; attempt += 1) {
+        const log = await readFile(cleanupLog, "utf8");
+        if (log.split("registered").length > expected) break;
+        await Bun.sleep(25);
+      }
+      server.kill("SIGTERM");
+      assert.equal(await exitCode(server), 0, `${workers} worker(s)`);
+      assert.match(
+        await readFile(cleanupLog, "utf8"),
+        /cleaned up/,
+        `the app's SIGTERM cleanup must finish during startup: ${workers} worker(s)`,
+      );
+    } finally {
+      server.kill("SIGKILL");
+      await server.exited;
+    }
+  }
+}
+
 async function testRejectRemovedTls() {
   const port = await reservePort();
   const server = Bun.spawn(["bun", "--cwd", "site", "dist/server/entry.mjs"], {
@@ -729,6 +762,7 @@ async function testStandalone() {
   await testSupervisorShutdownTimeout();
   await testOrphanedDuringInit();
   await testAppCleanupOnShutdown();
+  await testSignalDuringStartup();
   await testRejectRemovedTls();
 
   const relocated = path.join(site, "relocated-dist");
