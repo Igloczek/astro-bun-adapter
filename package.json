@@ -67,10 +67,10 @@
     "typescript": "7.0.2"
   },
   "engines": {
-    "bun": ">=1.4.4",
+    "bun": ">=1.4.5",
     "node": ">=22.23.4"
   },
-  "packageManager": "bun@1.4.4",
+  "packageManager": "bun@1.4.5",
   "publishConfig": {
     "access": "public",
     "provenance": true

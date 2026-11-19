@@ -24,7 +24,7 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
 
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -48,10 +48,10 @@ jobs:
       matrix:
         include:
           - target: oldest supported
-            bun: 1.4.4
+            bun: 1.4.5
             astro: 7.4.7
           - target: latest Astro
-            bun: 1.4.4
+            bun: 1.4.5
             astro: ^7.4.7
           - target: latest Bun and Astro
             bun: latest
